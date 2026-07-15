@@ -29,13 +29,13 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=Archivo+Narrow:wght@400;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 .stApp { background: #10100e; }
-html, body, [class*="css"] { font-family: 'Archivo', system-ui, sans-serif; color: #e8e6e1; }
+html, body, [class*="css"] { font-family: 'Archivo', system-ui, sans-serif; color: #f0eee9; }
 h1,h2,h3,h4 { font-family: 'Archivo', sans-serif !important; letter-spacing:-0.03em; color:#f5f3ee !important; }
 
-.masthead { border-bottom: 2px solid #2b2a26; padding-bottom: 14px; margin-bottom: 6px; }
+.masthead { border-bottom: 2px solid #3a3833; padding-bottom: 14px; margin-bottom: 6px; }
 .title { font-family:'Archivo',sans-serif; font-size:2.5rem; font-weight:800; letter-spacing:-0.045em;
          color:#f5f3ee; line-height:1; margin:0; }
-.rule-cite { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#8f8a7e;
+.rule-cite { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#a8a294;
              letter-spacing:0.06em; text-transform:uppercase; margin-top:8px; }
 
 /* verdicts read as stamps on a form, not badges in an app */
@@ -48,20 +48,26 @@ h1,h2,h3,h4 { font-family: 'Archivo', sans-serif !important; letter-spacing:-0.0
 
 .mono { font-family:'JetBrains Mono',monospace; }
 .figure { font-family:'JetBrains Mono',monospace; font-size:1.9rem; font-weight:700; color:#f5f3ee; line-height:1; }
-.figure-label { font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#8f8a7e;
+.figure-label { font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:#a8a294 !important;
                 letter-spacing:0.1em; text-transform:uppercase; }
 .binding { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:#e0725f;
            letter-spacing:0.05em; }
-.card { background:#181713; border:1px solid #2b2a26; padding:16px 18px; margin-bottom:10px; }
-.cite { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#6f6b61;
-        letter-spacing:0.04em; }
-.ledger-row { border-bottom:1px solid #23221e; padding:7px 0; font-family:'JetBrains Mono',monospace;
-              font-size:0.78rem; }
+.card { background:#1c1b17; border:1px solid #3a3833; padding:16px 18px; margin-bottom:10px;
+        color:#f0eee9 !important; font-size:0.92rem; line-height:1.5; }
+.card * { color:#f0eee9 !important; }
+/* Streamlit wraps markdown in its own styled divs that override ours */
+.stMarkdown, .stMarkdown p, [data-testid="stMarkdownContainer"] p { color:#f0eee9 !important; }
+.stExpander p, .stExpander label { color:#e4e1da !important; }
+.cite, .cite * { font-family:'JetBrains Mono',monospace !important; font-size:0.72rem !important;
+        color:#9b9689 !important; letter-spacing:0.04em; line-height:1.5; }
+.ledger-row, .ledger-row * { border-bottom:1px solid #33312c; padding:7px 0;
+              font-family:'JetBrains Mono',monospace !important; font-size:0.82rem !important;
+              color:#f0eee9 !important; line-height:1.6; }
 .sourced { color:#9fd67a; font-family:'JetBrains Mono',monospace; font-size:0.6rem; }
 .assumed { color:#d6b45a; font-family:'JetBrains Mono',monospace; font-size:0.6rem; }
-hr { border-color:#2b2a26; }
+hr { border-color:#3a3833; }
 .stButton>button { font-family:'JetBrains Mono',monospace; font-weight:600; letter-spacing:0.05em;
-                   border-radius:0; border:1.5px solid #4a4740; background:#1d1c18; color:#e8e6e1; }
+                   border-radius:0; border:1.5px solid #4a4740; background:#1d1c18; color:#f0eee9; }
 .stButton>button:hover { border-color:#9fd67a; color:#9fd67a; }
 </style>
 """, unsafe_allow_html=True)
