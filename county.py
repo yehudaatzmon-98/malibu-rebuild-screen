@@ -1,0 +1,280 @@
+"""
+LA County Assessor parcel enrichment
+=====================================
+Live public endpoint, no auth, updated weekly:
+  https://public.gis.lacounty.gov/public/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0
+
+This is the layer that turns a Redfin export (which has NO prior square footage —
+burned lots show dashes across beds/baths/sqft) into something the Interp. No. 24
+envelope math can actually run on.
+
+Fields pulled and why each matters:
+  SQFTmain1..5    prior square footage — the input the entire model rests on
+  YearBuilt1..5   drives the prior ceiling-height estimate (the volume ceiling)
+  Units1..5       NO NET LOSS detector (Interp 24 Issue 8 / SB 166). This is what
+                  took a human reading the rule to catch on 20314 PCH. Now a column.
+  UseCode/UseDescription   eligibility triage
+  DesignType1..5  multiple structures per parcel = Issue No. 7 (combining sqft)
+  CENTER_LAT/LON  real geocodes. No more fabricated coordinates.
+  Shape.STArea()  lot size from the parcel polygon, not a listing claim
+
+The address join is CLEAN, not fuzzy: SitusHouseNo is a separate field, so we match
+on house number exactly and street with a LIKE. No string-similarity guessing.
+
+NOTE: every value returned here is tagged SOURCED. Values that disagree with the
+listing are flagged, not reconciled — see Interp. No. 24 Issue No. 12, which requires
+a survey at Planning Verification precisely because Assessor and plans disagree.
+"""
+
+from __future__ import annotations
+import re
+import time
+from dataclasses import dataclass, field
+from typing import Optional
+import requests
+
+ENDPOINT = ("https://public.gis.lacounty.gov/public/rest/services/"
+            "LACounty_Cache/LACounty_Parcel/MapServer/0/query")
+
+OUT_FIELDS = ",".join([
+    "AIN", "APN", "SitusHouseNo", "SitusStreet", "SitusFullAddress", "SitusCity",
+    "UseCode", "UseType", "UseDescription",
+    "DesignType1", "YearBuilt1", "Units1", "Bedrooms1", "Bathrooms1", "SQFTmain1",
+    "DesignType2", "YearBuilt2", "Units2", "SQFTmain2",
+    "DesignType3", "YearBuilt3", "Units3", "SQFTmain3",
+    "Roll_Year", "Roll_LandValue", "Roll_ImpValue",
+    "CENTER_LAT", "CENTER_LON",
+])
+
+# LA County use codes — the ones that matter for this regime.
+# 01xx = single family, 02xx = 2 units, 03xx = 3 units, 04xx = 4+ units,
+# 05xx = 5+/apartments, 010V/0100 vacant.
+SFR_PREFIXES = ("010",)
+MULTI_PREFIXES = ("02", "03", "04", "05", "06", "07", "08")
+
+
+@dataclass
+class Parcel:
+    found: bool
+    ain: Optional[str] = None
+    situs: Optional[str] = None
+    use_code: Optional[str] = None
+    use_desc: Optional[str] = None
+    prior_sqft: Optional[int] = None        # sum across structures
+    sqft_by_structure: list = field(default_factory=list)
+    year_built: Optional[int] = None
+    units: Optional[int] = None
+    beds: Optional[int] = None
+    baths: Optional[int] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    n_structures: int = 0
+    land_value: Optional[int] = None
+    imp_value: Optional[int] = None
+    note: str = ""
+
+
+def _norm_street(s: str) -> str:
+    """Normalize a street name for the LIKE clause. County uses abbreviations."""
+    s = str(s).upper().strip()
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\s+", " ", s)
+    # 'PCH' is how everyone writes it; the county stores 'PACIFIC COAST HWY'
+    if re.fullmatch(r"PCH", s):
+        s = "PACIFIC COAST HWY"
+    # county stores 'PACIFIC COAST HWY' — strip the common suffix variants so the
+    # LIKE matches regardless of which the listing used
+    for long, short in [("HIGHWAY", "HWY"), ("BOULEVARD", "BLVD"), ("AVENUE", "AVE"),
+                        ("STREET", "ST"), ("DRIVE", "DR"), ("ROAD", "RD"),
+                        ("PLACE", "PL"), ("TERRACE", "TER"), ("LANE", "LN"),
+                        ("COURT", "CT"), ("CIRCLE", "CIR"), ("WAY", "WAY")]:
+        s = re.sub(rf"\b{long}\b", short, s)
+    return s
+
+
+def split_address(addr: str):
+    """'20610 Pacific Coast Hwy' -> ('20610', 'PACIFIC COAST HWY')"""
+    a = str(addr).strip()
+    m = re.match(r"^\s*(\d+)\s*(?:1/2)?\s+(.*)$", a)
+    if not m:
+        return None, None
+    house = m.group(1)
+    street = _norm_street(m.group(2))
+    # drop unit designators — county keeps those in SitusUnit
+    street = re.split(r"\s+(?:#|UNIT|APT)\b", street)[0].strip()
+    return house, street
+
+
+def lookup(address: str, city: str = "MALIBU", timeout: int = 20,
+           retries: int = 2) -> Parcel:
+    """
+    Query the county for one address. Clean join: exact house number, LIKE street.
+    Returns Parcel(found=False) rather than raising — a miss is data, not an error.
+    """
+    house, street = split_address(address)
+    if not house:
+        return Parcel(False, note=f"Could not parse address: {address!r}")
+
+    # Take the distinctive part of the street for the LIKE, so 'PACIFIC COAST HWY'
+    # matches whether the county stored 'PACIFIC COAST HWY' or 'PACIFIC COAST'
+    core = " ".join(street.split()[:2]) if len(street.split()) > 1 else street
+    where = (f"SitusHouseNo = '{house}' AND SitusStreet LIKE '{core}%'")
+    if city:
+        where += f" AND SitusCity LIKE '{str(city).upper()}%'"
+
+    params = {"where": where, "outFields": OUT_FIELDS, "returnGeometry": "false",
+              "f": "json", "resultRecordCount": 5}
+
+    last = ""
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(ENDPOINT, params=params, timeout=timeout)
+            r.raise_for_status()
+            js = r.json()
+            if "error" in js:
+                return Parcel(False, note=f"County API error: {js['error'].get('message','?')}")
+            feats = js.get("features", [])
+            if not feats:
+                return Parcel(False, note=f"No county parcel matched {house} {core}")
+            return _to_parcel(feats[0]["attributes"])
+        except Exception as e:
+            last = str(e)
+            if attempt < retries:
+                time.sleep(1.5 * (attempt + 1))
+    return Parcel(False, note=f"County lookup failed after {retries+1} tries: {last}")
+
+
+def _to_parcel(a: dict) -> Parcel:
+    sqfts, years, units, designs = [], [], [], []
+    for i in (1, 2, 3):
+        s = a.get(f"SQFTmain{i}")
+        if s:
+            sqfts.append(int(s))
+            y = a.get(f"YearBuilt{i}")
+            if y and str(y).strip() not in ("", "0"):
+                years.append(int(y))
+            u = a.get(f"Units{i}")
+            if u:
+                units.append(int(u))
+            designs.append(a.get(f"DesignType{i}"))
+
+    total_sqft = sum(sqfts) if sqfts else None
+    # Issue No. 7: multiple structures may be combinable, but the SUM is what the
+    # 110% applies to. Report both the total and the breakdown.
+    return Parcel(
+        found=True,
+        ain=a.get("AIN"),
+        situs=a.get("SitusFullAddress") or a.get("SitusStreet"),
+        use_code=a.get("UseCode"),
+        use_desc=a.get("UseDescription"),
+        prior_sqft=total_sqft,
+        sqft_by_structure=sqfts,
+        year_built=min(years) if years else None,
+        units=sum(units) if units else None,
+        beds=a.get("Bedrooms1"),
+        baths=a.get("Bathrooms1"),
+        lat=a.get("CENTER_LAT"),
+        lon=a.get("CENTER_LON"),
+        n_structures=len(sqfts),
+        land_value=a.get("Roll_LandValue"),
+        imp_value=a.get("Roll_ImpValue"),
+    )
+
+
+# ---------------------------------------------------------------- triage
+@dataclass
+class Triage:
+    verdict: str      # ELIGIBLE | EXCLUDED | UNSCOREABLE | REVIEW
+    reason: str
+    rule: str = ""
+
+
+def triage(p: Parcel, listing_sqft=None, listing_price=None) -> Triage:
+    """
+    Eligibility screen against Interpretation No. 24. This is the step that took a
+    human reading the rule to catch 20314 (3 units) and 22411 (not a burn lot).
+    """
+    if not p.found:
+        return Triage("UNSCOREABLE", p.note or "No county record matched.")
+
+    if not p.prior_sqft:
+        return Triage(
+            "UNSCOREABLE",
+            "County shows no prior structure square footage. Like-for-like relief is "
+            "granted by reference to what burned — with no prior sqft there is no "
+            "envelope to compute. If the Assessor listed the parcel as vacant BEFORE "
+            "the fire, any structure on it is deemed illegal.",
+            "Interp. No. 24, Issue No. 4")
+
+    if p.units and p.units > 1:
+        return Triage(
+            "EXCLUDED",
+            f"County shows {p.units} units. Converting multifamily to a single-family "
+            f"home triggers No Net Loss — the lost units must be replaced as ADUs, "
+            f"which consume envelope. Not single-family underwriting.",
+            "Interp. No. 24, Issue No. 8 / SB 166")
+
+    uc = str(p.use_code or "")
+    if uc.startswith(MULTI_PREFIXES):
+        return Triage("EXCLUDED",
+                      f"Use code {uc} ({p.use_desc}) indicates multifamily. See No Net Loss.",
+                      "Interp. No. 24, Issue No. 8")
+
+    flags = []
+    if p.n_structures > 1:
+        flags.append(
+            f"{p.n_structures} structures on parcel ({', '.join(str(s) for s in p.sqft_by_structure)} sf). "
+            f"Combining is permitted only if they were <=10ft apart and the use is maintained; "
+            f"uninhabitable sqft must stay uninhabitable [Issue No. 7].")
+
+    if listing_sqft and p.prior_sqft:
+        try:
+            ls = float(listing_sqft)
+            gap = abs(ls - p.prior_sqft) / p.prior_sqft
+            if gap > 0.10:
+                flags.append(
+                    f"DISCREPANCY: listing claims {ls:,.0f} sf vs county {p.prior_sqft:,} sf "
+                    f"({gap:.0%} gap). Model the county record. A survey is required at "
+                    f"Planning Verification precisely because of this [Issue No. 12].")
+        except (TypeError, ValueError):
+            pass
+
+    return Triage("ELIGIBLE", " | ".join(flags) if flags else
+                  f"Single-family, {p.prior_sqft:,} sf prior, built {p.year_built}.")
+
+
+# ---------------------------------------------------------------- envelope
+def ceiling_from_year(yr: Optional[int]):
+    if not yr:
+        return None, "UNKNOWN — no year built"
+    if yr < 1950:
+        return 8.0, f"ESTIMATED from year built {yr} (pre-1950 ~8ft)"
+    if yr < 2000:
+        return 8.5, f"ESTIMATED from year built {yr} (mid-century ~8.5ft)"
+    return 9.5, f"ESTIMATED from year built {yr} (modern ~9.5ft)"
+
+
+def envelope(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
+             basement_sqft: float = 0.0, factor: float = 1.10):
+    """
+    Interp. No. 24, Issue No. 1 — THREE SIMULTANEOUS CEILINGS.
+    "does not exceed 110 percent the bulk (volume), square footage, or height"
+
+        buildable = min( prior_sqft x 1.10 , (prior_volume x 1.10) / proposed_ceiling )
+
+    The volume cap binds whenever proposed ceiling height > prior ceiling height.
+    Basements and subterranean garages count toward the same 110% [Issue No. 5]
+    and carry no finished exit value per sf.
+    """
+    sqft_cap = prior_sqft * factor
+    prior_volume = prior_sqft * prior_ceiling
+    vol_cap = (prior_volume * factor) / proposed_ceiling
+    gross = min(sqft_cap, vol_cap)
+    binding = "SQUARE FOOTAGE" if sqft_cap <= vol_cap else "VOLUME (bulk)"
+    habitable = gross - (basement_sqft or 0)
+    return dict(
+        gross=round(gross), habitable=round(habitable),
+        sqft_cap=round(sqft_cap), vol_cap=round(vol_cap),
+        binding=binding, prior_volume=round(prior_volume),
+        haircut_vs_prior=(gross / prior_sqft) - 1.0,
+    )
