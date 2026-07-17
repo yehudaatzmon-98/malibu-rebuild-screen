@@ -19,7 +19,7 @@ from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_
                     split_address, ceiling_sensitivity, spr_check, purchaser_diligence,
                     realistic_program, access_dedication_warning, height_conformity_flag,
                     pf1_check, tdsf_cap, beachfront_fork, baseline_provenance_warning,
-                    the_record_exists, design_out_of_it)
+                    the_record_exists, design_out_of_it, issue10_exposure, nollan_reality)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -333,6 +333,9 @@ with tab_one:
                 if cliff:
                     st.markdown(f'<div class="card card-warn">{cliff}</div>',
                                 unsafe_allow_html=True)
+                    if beachfront:
+                        st.markdown(f'<div class="card">{nollan_reality()}</div>',
+                                    unsafe_allow_html=True)
                 spr = spr_check(beachfront, proposed_ceiling, 1,
                                 spend_allowance_vertically=spend_vert)
                 if spr:
@@ -340,6 +343,10 @@ with tab_one:
                 st.markdown(f'<div class="card card-note">'
                             f'{height_conformity_flag(conforming=height_conf)}</div>',
                             unsafe_allow_html=True)
+                with st.expander("Issue No. 10 — the exposure everyone models wrong",
+                                 expanded=False):
+                    st.markdown(f'<div class="card card-warn">{issue10_exposure()}</div>',
+                                unsafe_allow_html=True)
                 ph, basis = ceiling_from_year(p.year_built, prior_override or None)
                 if ph:
                     both = envelope_both_cases(p.prior_sqft, ph, proposed_ceiling, basement)
@@ -633,7 +640,7 @@ improvement value on the roll, not the sf field.
 - **The 110% height cap.** Only bulk and square footage are computed. A design can pass here and fail on height.
 - **Issue No. 7's ≤10ft-apart test.** Multiple structures are summed and flagged, not combined per the rule.
 - **Setbacks, FAR, zoning compliance.** Only the 18ft SPR trigger is checked.
-- **Whether SPR is appealable** to the Planning Commission and then Council. Unverified, and it materially changes tail risk.
+- ~~Whether SPR is appealable~~ — **answered, and it's worse than "appealable."** MMC 17.62.040(E) → 17.04.220: Director → Planning Commission → City Council, both rungs. And *"An action of the planning manager/director appealed to the planning commission shall not become effective unless and until final action by the planning commission."* The appeal **suspends the approval by operation of the code**. Any neighbour suspends your SPR with a filing fee. Design out of SPR — that's not optimization, it's declining to hand five neighbours a suspension switch.
 - **Cycle times.** No reliable post-fire Malibu SPR or planning-verification data exists. Any month figure here is an estimate.
 
 **On the things this tool won't estimate.** There's no published grant rate for the discretionary

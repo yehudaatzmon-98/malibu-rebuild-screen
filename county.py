@@ -338,8 +338,31 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None, storeys=None) -> Tr
             "EXCLUDED",
             f"County shows {p.units} units. Converting multifamily to a single-family "
             f"home triggers No Net Loss — the lost units must be replaced as ADUs, "
-            f"which consume envelope. Not single-family underwriting.",
-            "Interp. No. 24, Issue No. 8 / SB 166", jur.MALIBU)
+            f"which consume envelope.<br><br>"
+            f"<b>But No Net Loss isn't the binding constraint — 'same use' is, and it's "
+            f"structurally prior.</b> LIP 13.4.6(A)(1) is a threshold criterion of the "
+            f"exemption itself: <i>\"It is for the same use as the destroyed structure.\"</i> "
+            f"Triplex to single-family is a use change. Fail it and Issue No. 8 never engages, "
+            f"because there's no exemption left to condition — you're at a full CDP.<br><br>"
+            f"<b>How granularly does Malibu read 'use'? Issue No. 7 answers it:</b> <i>\"If an "
+            f"uninhabitable structure (such as a garage) is combined with a habitable "
+            f"structure, the square footage of the uninhabitable area must be "
+            f"maintained.\"</i> The City polices habitable-vs-uninhabitable <i>within a single "
+            f"residence</i> as a use distinction. If garage-vs-house is a use difference, "
+            f"triplex-vs-SFR isn't close.<br><br>"
+            f"<b>Which reframes the ADU remedy.</b> Issue No. 8's ADUs aren't a No Net Loss "
+            f"workaround — they're plausibly a <i>same-use</i> workaround. Three dwelling units "
+            f"to three dwelling units preserves density and use at once. That's why the fix is "
+            f"ADUs rather than an in-lieu fee: a fee would satisfy SB 166 and do nothing for "
+            f"13.4.6(A)(1).<br><br>"
+            f"<b>So: SFR + 2 ADUs (or three homes) likely clears both gates. One house fails "
+            f"both.</b><br>"
+            f"<span class='cite'>The counter for counsel to argue: 'use' in PRC 30610(g) may "
+            f"mean the broad Coastal Act category — residential vs commercial — since the "
+            f"statute's concern is resource intensity, not zoning taxonomy. Probably loses "
+            f"against Issue No. 7's text, but it's the argument. And verify structure "
+            f"separations: over 10ft apart and Issue No. 7 forecloses combining regardless.</span>",
+            "Interp. No. 24, LIP 13.4.6(A)(1) / Issue No. 8", jur.MALIBU)
 
     uc = str(p.use_code or "")
     if uc.startswith(MULTI_PREFIXES):
@@ -520,6 +543,11 @@ def the_record_exists() -> str:
         "trimmed? Was the applicant a natural person or an entity? Was the property "
         "owner-occupied at the fire date? Was anything conditioned that the code doesn't "
         "require?<br><br>"
+        "<b>Ask for the DENIALS and the WITHDRAWALS, not just the approvals.</b> A discretion "
+        "that has never been exercised adversely and a discretion that gets exercised at the "
+        "counter — applicant reads the room, trims the ask, never files — <b>look identical in "
+        "a stack of approvals</b>. The withdrawn and revised applications are where the signal "
+        "is, and they're the records nobody requests.<br><br>"
         "That won't produce a rate. It answers the question you're actually asking, which "
         "isn't <i>what's the probability</i> but <b>has the Planning Director ever exercised "
         "that discretion against anyone, and on what facts?</b> If all 22 got the 10% "
@@ -796,7 +824,13 @@ def beachfront_fork(is_beachfront: Optional[bool]) -> str:
                 "<b>Non-beachfront</b> — TDSF binds (17.7% of lot + 1,000). Shifted bulk above "
                 "18ft outside the original envelope needs SPR. No access cliff.<br><br>"
                 "<span class='cite'>Determinable from the City's GIS layers, or by standing on "
-                "the lot. Free. Do it before anything else.</span>")
+                "the lot. Free. <b>Do it before anything else</b> — and not just because it "
+                "forks the envelope. It also sets the evidentiary target for Issue No. 4 by "
+                "fifteen years: the general test accepts proof of existence prior to City "
+                "incorporation (1991), <i>except</i> structures on a beach, coastal bluff, in "
+                "ESHA or other sensitive coastal resource area, which must be shown to have "
+                "existed prior to the Coastal Act (1976). Resolve beachfront first or you'll "
+                "send someone to the wrong decade of aerials.</span>")
     if is_beachfront:
         return ("<span class='cite'><b>Beachfront.</b> Exempt from TDSF. No SPR under Issue "
                 "No. 9. Height from the wave-action finish floor. Stringline setbacks. Seawall "
@@ -1008,17 +1042,160 @@ def spr_check(is_beachfront: Optional[bool], proposed_ceiling: float,
                 "Setback encroachments trigger review separately.</span>")
 
     return ("<b>SITE PLAN REVIEW REQUIRED [Issue No. 9].</b> Non-beachfront, and you're "
-            "spending the +10% vertically past 18ft. Director-level, not a hearing — but it "
-            "notices owners within 500ft (min 10 developed properties), and the standard is "
-            "'substantial evidence supports the findings' after consultation with six "
-            "specialists. Model <b>3-6 months</b>, and treat that as an estimate: no reliable "
-            "post-fire Malibu SPR cycle-time data exists.<br><br>"
-            "<b>You probably don't need this.</b> The allowance is bulk-constrained — you "
-            "generally can't have both height and area. Take the 10% laterally, keep the "
-            "roofline at prior height, stay inside the original envelope, and SPR goes away. "
-            "On the Las Flores lots that is close to free.<br><br>"
-            "<span class='cite'>If you also RELOCATE the structure, Ordinance 524's new "
-            "MMC 17.62.040(A)(13) applies and the notice radius goes to 1,000ft.</span>")
+            "spending the +10% vertically past 18ft.<br><br>"
+            "<b>The appeal SUSPENDS the approval. That's the whole problem.</b><br>"
+            "MMC 17.62.040(E) routes to 17.04.220: any aggrieved person appeals the Director "
+            "to the <b>Planning Commission</b>, and from there to <b>City Council</b>. Both "
+            "rungs confirmed. And: <i>\"An action of the planning manager/director appealed to "
+            "the planning commission shall not become effective unless and until final action "
+            "by the planning commission.\"</i><br><br>"
+            "Not enjoined — <b>suspended by operation of the code</b>. Any neighbour who "
+            "dislikes your story poles suspends your approval by filing a form. Their cost is "
+            "a filing fee. That is a free option written to every adjacent owner.<br><br>"
+            "<b>And the findings are view findings, so the neighbours decide.</b> "
+            "MMC 17.62.040(D) requires that the project <i>\"does not obstruct visually "
+            "impressive scenes of the Pacific Ocean... from the main viewing area of any "
+            "affected principal residence.\"</i> Combined with 500ft noticing (1,000ft if you "
+            "also relocate), an SPR is functionally a neighbour referendum on your "
+            "roofline.<br><br>"
+            "<b>Story poles.</b> MMC Chapter 17.42: where SPR is required, <i>\"the entire "
+            "development above 18 feet, including all roof projections, requires the "
+            "installation of story poles.\"</i> You erect a physical outline of your massing "
+            "for the neighbourhood to look at before the decision. Nothing generates appeals "
+            "like story poles. <span class='cite'>(Ch. 17.42 is Custom Development Criteria "
+            "and may not reach every parcel — verify.)</span><br><br>"
+            "<b>The 30-day clock is a trap.</b> The code says decide within 21-30 days of the "
+            "notice of filing (60 with Environmental Review Board referral), then says: "
+            "<i>\"These deadlines are directory and no decision shall be subject to "
+            "invalidation solely on the ground that it was made after the deadline.\"</i> A "
+            "clock the code tells you isn't enforceable.<br><br>"
+            "<b>Two procedural crumbs:</b> only matters raised in the appeal get reviewed — no "
+            "roving review. And an appellant who doesn't file specific grounds within 10 days "
+            "gets their fee returned and the appeal is deemed withdrawn. Sloppy appellants "
+            "self-destruct.<br><br>"
+            "<b style='color:#7a2518'>You probably don't need any of this.</b> The allowance "
+            "is bulk-constrained — you generally can't have both height and area. Take the 10% "
+            "laterally, hold the prior roofline, stay inside the original envelope, and SPR "
+            "goes away entirely. That isn't schedule optimisation. <b>It's declining to hand "
+            "five neighbours a suspension switch.</b>")
+
+
+def issue10_exposure() -> str:
+    """
+    THE EXPOSURE EVERYONE MODELS WRONG.
+
+    Issue No. 10 doesn't need to be struck down. It needs to be DISREGARDED — and
+    that requires no litigation, no finding, no adverse ruling.
+
+    On appeal, after a substantial-issue finding, the Commission considers the
+    application DE NOVO, and the test is whether the development conforms to the
+    certified Local Coastal Program and the public access policies of the Coastal
+    Act. Certified LCP. Not Interpretation No. 24. The Commission is not bound by,
+    does not defer to, and has no obligation to even discuss the City's construction
+    of certified text.
+
+    In that room Issue No. 10 has to stand alone on two defects:
+      SCOPE — the definition says "For purposes of implementing the public access
+        requirements of PRC Section 30212 and of this Section." Issue No. 10 uses a
+        public-access carve-out to decide a flood-hazard question in a different
+        chapter.
+      CIRCULARITY — the exclusion is conditioned on the replacement structure
+        "conform[ing] to applicable existing zoning requirements." Issue No. 10 uses
+        it to establish non-application of a zoning requirement.
+
+    Reinforced by Malibu's own LIP 1.3: where the LCP and a City resolution conflict
+    and both can't be met, "the LCP shall take precedence." And by the Commission's
+    own certified text — LIP 13.4.11(A)(4) exists precisely to handle FEMA-driven
+    finished floor through a WAIVER, which is the Commission's answer to the question
+    Issue No. 10 says needs no answer.
+    """
+    return (
+        "<b>Issue No. 10's risk isn't invalidation. It's that the Commission never has to "
+        "accept it.</b><br><br>"
+        "On appeal the Commission reviews <b>de novo</b> against the <b>certified LCP</b> and "
+        "the Coastal Act's public access policies. Not Interpretation No. 24 — the Commission "
+        "isn't bound by it, doesn't defer to it, and has no obligation to discuss it. So "
+        "Issue No. 10 doesn't need to be struck down. It just isn't the governing document in "
+        "the room. That requires no litigation, no finding, no adverse ruling.<br><br>"
+        "<b>Where it bites, in order of likelihood:</b><br>"
+        "1. <b>Nobody appeals; nothing happens.</b> Most likely. Exemptions are quiet.<br>"
+        "2. <b>A DMW gets appealed</b> by an aggrieved person within 10 working days in the "
+        "appeal jurisdiction — Commission reviews against certified text, Issue No. 10 is "
+        "irrelevant, you argue the waiver on its merits.<br>"
+        "3. <b>The Executive Director disputes the exemption determination.</b> The channel "
+        "people forget. Doesn't need a neighbour or a lawsuit — needs a staff analyst deciding "
+        "your file isn't exempt.<br>"
+        "4. <b>A third party challenges the interpretation itself.</b> Surfrider is the "
+        "obvious candidate; they're already on record about developers getting the same "
+        "fast-tracking as a displaced family, and they'd want a clean vehicle.<br><br>"
+        "<b>Timing is the whole risk profile.</b> None of this is front-loaded. The City "
+        "issues your planning verification quickly and cheaply, and the exposure matures when "
+        "you're vertical, or at CO, or — worst — <b>at your exit, when your buyer's counsel "
+        "reads the file and finds a house built in reliance on an uncertified interpretation "
+        "of a state-certified document.</b> That's not a permit problem. That's a "
+        "marketability problem, and it doesn't appear anywhere in a construction "
+        "schedule.<br><br>"
+        "<b style='color:#7a2518'>The mitigation is cheap and nobody does it:</b> where the "
+        "project can qualify under the <b>certified</b> LIP 13.4.11(A)(4) waiver, <b>take the "
+        "waiver even though Issue No. 10 says you don't need it.</b> You're buying a certified "
+        "instrument with Commission-facing findings instead of relying on an uncertified City "
+        "memo. Costs a noticing period and a 10-day appeal window. Buys a clean file. On "
+        "beachfront at these price points that trade is obviously correct.")
+
+
+def nollan_reality() -> str:
+    """
+    Why "design out of it" is the entire strategy rather than risk mitigation.
+
+    The legal analysis favours you and Nollan is nearly your facts: beachfront
+    rebuild, small bungalow demolished, larger house proposed, Commission
+    conditioned the permit on a lateral access easement. Struck for want of
+    essential nexus. Dolan added rough proportionality. Sheetz (2024) confirmed
+    Nollan/Dolan reach legislatively-imposed conditions, so the Commission can't
+    launder an exaction through LCP policy.
+
+    Nollan's defect was MISMATCH — the stated harm was visual blockage and a
+    "psychological barrier," the remedy was lateral passage. The easement didn't fix
+    the harm identified. Reverse it: articulate a burden on lateral passage and
+    demand a lateral easement, and nexus exists.
+
+    THE UNCOMFORTABLE PART: the Nollan defence is strong on the merits and close to
+    worthless as a business matter. You need the permit; they don't need anything.
+    The Commission's leverage isn't legal correctness — it's that vindicating your
+    rights takes years you don't have, in front of a body you'll be back in front of.
+    Nollan itself took a decade and went to the Supreme Court. Applicants concede
+    these conditions not because they're valid but because conceding is faster.
+
+    A constitutional defence you'd never actually assert has no value in your model.
+    A massing that never triggers the demand has all of it.
+    """
+    return (
+        "<b>Nollan is nearly your facts — and that's worth less than it sounds.</b><br><br>"
+        "<i>Nollan</i> was a beachfront rebuild: bungalow demolished, larger house proposed, "
+        "Commission conditioned the permit on a lateral access easement. Struck for want of "
+        "essential nexus. <i>Dolan</i> added rough proportionality. <i>Sheetz</i> (2024) "
+        "confirmed both reach legislatively-imposed conditions — the Commission can't launder "
+        "an exaction through LCP policy.<br><br>"
+        "<b>Nexus turns on your massing.</b> Nollan's defect was mismatch: the stated harm was "
+        "visual blockage, the remedy was lateral passage. The easement didn't fix the harm "
+        "identified. Reverse it — articulate a burden on lateral passage, demand a lateral "
+        "easement — and nexus exists. So: <b>expand landward and vertically within stringline "
+        "and the lateral-passage burden is unchanged, which leaves the nexus story nothing to "
+        "attach to.</b> Widen along the beach and you hand them the fit Nollan lacked.<br><br>"
+        "Two more things work for you: PRC 30212(a)'s own exceptions do independent work — "
+        "notably <i>adequate access exists nearby</i>, live in eastern Malibu — and below mean "
+        "high tide is already public trust, so an exaction can only reach dry sand. On a "
+        "narrow lot there may be very little to grab.<br><br>"
+        "<b style='color:#7a2518'>Now the uncomfortable part.</b> The Nollan defence is strong "
+        "on the merits and close to worthless as a business matter. <b>You need the permit. "
+        "They don't need anything.</b> The Commission's leverage isn't legal correctness — "
+        "it's that vindicating your rights takes years you don't have, in front of a body "
+        "you'll be back in front of. Nollan itself took a decade and went to the Supreme "
+        "Court. Applicants concede these conditions not because they're valid but because "
+        "conceding is faster.<br><br>"
+        "<b>Which is why 'design out of it' isn't risk mitigation. It's the entire "
+        "strategy.</b> A constitutional defence you'd never actually assert has no value in "
+        "your model. A massing that never triggers the demand has all of it.")
 
 
 def height_conformity_flag(prior_height_ft: Optional[float] = None,
@@ -1092,7 +1269,23 @@ def pf1_check() -> str:
             "inside the exemption, and it appears to attach to the property.<br>"
             "<span class='cite'>Nobody is asking this. A lot with a deemed-complete addition "
             "in the file is a repriceable asset the seller probably doesn't know they own. "
-            "One question per lot.</span>")
+            "One question per lot.</span><br><br>"
+            "<b>Whether PF1 transfers to a purchaser is genuinely unresolved.</b> It's the one "
+            "place in Interpretation No. 24 where 'property owner' plausibly does operative "
+            "work — everywhere else the subject of the sentence is the structure; here it's an "
+            "entitlement a specific person put into the City's system. Pending land use "
+            "applications generally attach to the property and are assignable, and the City's "
+            "FAQ says the rebuild rights go with the land. But a deemed-complete addition is "
+            "the closest thing in the scheme to a personal benefit.<br><br>"
+            "<b>Resolve it by email to Community Development — but not in the fund's name and "
+            "not attached to an APN.</b> You do not want a written 'PF1 does not transfer' "
+            "sitting in a file with your name on it: either as an adverse determination you "
+            "then argue around, or as a document that surfaces in diligence when <i>you</i> "
+            "are the seller. Neutral hypothetical, through the architect or counsel. Same "
+            "answer, no record.<br>"
+            "<span class='cite'>And if a lot's thesis <i>is</i> PF1, you're buying a legal "
+            "opinion rather than dirt — structure the value into a price adjustment, not your "
+            "basis.</span>")
 
 
 def envelope(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
