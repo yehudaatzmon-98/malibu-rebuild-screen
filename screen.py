@@ -11,12 +11,14 @@ matters when you need 15 lots and have 7.
 Run:  streamlit run screen.py
 """
 import io
+import re
 import pandas as pd
 import streamlit as st
 
 from county import lookup, triage, envelope, ceiling_from_year, split_address
+import jurisdiction as jur
 
-st.set_page_config(page_title="Malibu Rebuild Screen", layout="wide",
+st.set_page_config(page_title="Rebuild Screen", layout="wide",
                    initial_sidebar_state="collapsed")
 
 # ---------------------------------------------------------------- type & tone
@@ -82,18 +84,23 @@ def stamp(v):
 # ---------------------------------------------------------------- masthead
 st.markdown("""
 <div class="masthead">
-  <div class="title">Malibu Rebuild Screen</div>
-  <div class="rule-cite">LCP &amp; Zoning Code Interpretation No. 24 · Zoning Code No. 15 · adopted 15 Oct 2025
-  &nbsp;·&nbsp; parcel data: LA County Assessor, live</div>
+  <div class="title">Rebuild Screen</div>
+  <div class="rule-cite">Malibu · Interpretation No. 24, adopted 15 Oct 2025 &nbsp;|&nbsp;
+  City of LA · Emergency Executive Order 1 (rev. 18 Mar 2025) &amp; EO8
+  &nbsp;·&nbsp; parcel data: LA County Assessor, live &nbsp;·&nbsp; jurisdiction routed per parcel</div>
 </div>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 Drop in a Redfin export of new listings. Every address is checked against the County
-Assessor for what actually burned, screened against the rebuild rule, and returned with
-a verdict and the rule that produced it.
+Assessor for what actually burned, routed to the rulebook that governs **that parcel**,
+and returned with a verdict and the rule that produced it.
 
 **This is not a valuation.** It answers one question: *is this lot worth your afternoon?*
+
+The fire crossed a city line; the rules did not. Malibu caps bulk, square footage **and**
+height at 110% — so raising ceilings costs you area. The City of LA caps footprint and
+height only — so it doesn't. A parcel is never screened under a rule it isn't subject to.
 """)
 
 # ---------------------------------------------------------------- what Tal decides
@@ -132,10 +139,16 @@ with tab_one:
             st.markdown(f'<div class="card mono">{p.note}</div>', unsafe_allow_html=True)
         else:
             t = triage(p)
-            st.markdown(f'{stamp(t.verdict)}  <span class="cite">{t.rule}</span>',
+            j = jur.route(p.situs_city)
+            st.markdown(f'{stamp(t.verdict)}  <span class="cite">{j.name}'
+                        f'{" · " + t.rule if t.rule else ""}</span>',
                         unsafe_allow_html=True)
+            if p.note:
+                st.markdown(f'<div class="card mono" style="font-size:0.75rem">{p.note}</div>',
+                            unsafe_allow_html=True)
             st.markdown(f'<div class="card">{t.reason}</div>', unsafe_allow_html=True)
-            if t.verdict == "ELIGIBLE" and p.prior_sqft:
+            # Envelope math is Interp. No. 24 — Malibu only. Never run it elsewhere.
+            if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
                 ph, basis = ceiling_from_year(p.year_built)
                 if ph:
                     e = envelope(p.prior_sqft, ph, proposed_ceiling, basement)
@@ -180,18 +193,23 @@ with tab_batch:
         rows = []
         for i, r in raw.iterrows():
             addr = r[addr_col]
-            city = r.get("CITY", "MALIBU")
+            # No MALIBU fallback. A missing CITY column means query unfiltered and
+            # let the returned SitusCity decide — never assume a jurisdiction.
+            city = r.get("CITY")
+            if pd.isna(city):
+                city = None
             p = lookup(addr, city)
             listing_sqft = r.get("SQUARE FEET")
             t = triage(p, listing_sqft=listing_sqft)
             env = None
-            if t.verdict == "ELIGIBLE" and p.prior_sqft:
+            if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
                 ph, _ = ceiling_from_year(p.year_built)
                 if ph:
                     env = envelope(p.prior_sqft, ph, proposed_ceiling, basement)
             rows.append(dict(
                 Address=addr,
                 Verdict=t.verdict,
+                Jurisdiction=jur.route(p.situs_city).name if p.found else "—",
                 Prior_sf=p.prior_sqft,
                 Built=p.year_built,
                 Units=p.units,
@@ -210,7 +228,9 @@ with tab_batch:
         df = df.sort_values("Verdict", key=lambda s: s.map(order))
 
         n_e = (df.Verdict == "ELIGIBLE").sum()
-        st.markdown(f"### {n_e} worth your afternoon · {len(df) - n_e} not")
+        n_r = (df.Verdict == "REVIEW").sum()
+        st.markdown(f"### {n_e} scoreable · {n_r} City of LA (different rulebook) · "
+                    f"{len(df) - n_e - n_r} out")
 
         for v in ["ELIGIBLE", "REVIEW", "UNSCOREABLE", "EXCLUDED"]:
             sub = df[df.Verdict == v]
@@ -226,10 +246,13 @@ with tab_batch:
                     bits.append(f"<b>{int(x.Buildable_sf):,} sf buildable ({x.Delta})</b>")
                 if pd.notna(x.Ask):
                     bits.append(f"${x.Ask:,.0f}")
+                why = str(x.Why)
+                why = re.sub(r"<[^>]+>", "", why)
                 st.markdown(
                     f'<div class="ledger-row">{x.Address} &nbsp;·&nbsp; '
+                    f'<span class="cite">{x.Jurisdiction}</span> &nbsp;·&nbsp; '
                     f'{" · ".join(bits) if bits else ""}<br>'
-                    f'<span class="cite">{x.Why[:150]}{" · " + x.Rule if x.Rule else ""}</span></div>',
+                    f'<span class="cite">{why[:180]}{" · " + x.Rule if x.Rule else ""}</span></div>',
                     unsafe_allow_html=True)
             st.write("")
 
@@ -240,9 +263,19 @@ with tab_batch:
 
 st.markdown("---")
 st.markdown("""<span class="cite">
-The rule is fixed and cited: 110% of bulk, square footage, OR height — three ceilings,
-all binding at once (Issue No. 1). Basements count (Issue No. 5). Multifamily prior use
-triggers No Net Loss (Issue No. 8). Assessor-vs-listing conflicts require a survey at
-Planning Verification (Issue No. 12). County data is SOURCED. Ceiling height is ESTIMATED
-from year built. What you'd build is yours.
+<b>MALIBU · Interpretation No. 24.</b> 110% of bulk, square footage, OR height — three
+ceilings, all binding at once (Issue No. 1). Basements and subterranean garages count
+(Issue No. 5). Multifamily prior use triggers No Net Loss (Issue No. 8). Assessor-vs-listing
+conflicts require a survey at Planning Verification (Issue No. 12).<br>
+<b>CITY OF LA · EO1 / EO8.</b> Caps footprint and height at 110% — NOT volume, NOT gross
+square footage. A new story is permitted within those caps. EO8 lets zoning-compliant
+non-like-for-like single-family projects bypass local Coastal Act and CEQA review. LA
+parcels return REVIEW, not an envelope: EO1 needs prior FOOTPRINT and the Assessor
+publishes gross sqft. The rule is known; the input isn't. We don't guess it.<br>
+<b>NOT MODELLED:</b> Issue No. 9 (non-beachfront +10% above 18ft needs Site Plan Review —
+five of the seven PCH lots are non-beachfront, so the +10% is discretionary there, not
+ministerial). Issue No. 7's ≤10ft-apart test. The 110% height cap itself.<br>
+County data is SOURCED. <b>Ceiling height is ESTIMATED from year built and is unsourced —
+it is the softest load-bearing number in this tool</b> and it drives the volume ceiling.
+What you'd build is yours.
 </span>""", unsafe_allow_html=True)
