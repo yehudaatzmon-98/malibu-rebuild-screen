@@ -16,7 +16,9 @@ import pandas as pd
 import streamlit as st
 
 from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_year,
-                    split_address, ceiling_sensitivity, spr_check, purchaser_diligence)
+                    split_address, ceiling_sensitivity, spr_check, purchaser_diligence,
+                    realistic_program, access_dedication_warning, height_conformity_flag,
+                    pf1_check)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -244,11 +246,38 @@ with st.expander("What you'd build — your calls, not the rule's", expanded=Fal
                  "Determinable per parcel from the City's GIS layers.")
         beachfront = {"Unknown": None, "Beachfront": True, "Non-beachfront": False}[bf]
     with c5:
-        storeys_build = st.number_input(
-            "Storeys you'd build", 1, 4, 1, 1,
-            help="Ceiling height x storeys is checked against the 18ft SPR threshold.")
-        st.markdown('<span class="cite">Checked against the 18ft threshold on Malibu '
-                    'non-beachfront lots.</span>', unsafe_allow_html=True)
+        spend = st.selectbox(
+            "How you'd spend the +10%",
+            ["Laterally (prior roofline)", "Vertically (taller)"],
+            help="The SPR trigger is the INCREASE above 18ft, not the structure's height.")
+        spend_vert = spend.startswith("Vertically")
+        st.markdown('<span class="cite">The SPR trigger is the <i>increase</i> above 18ft, '
+                    'not the structure. Rebuild a 24ft house at 24ft and nothing is '
+                    'increased. Take it laterally and SPR goes away — and since the '
+                    'allowance is bulk-constrained anyway, that\'s close to free.</span>',
+                    unsafe_allow_html=True)
+
+    st.markdown("")
+    c6, c7 = st.columns(2)
+    with c6:
+        hc = st.selectbox(
+            "Prior structure height conformity",
+            ["Unknown", "Conforming", "Nonconforming"],
+            help="Decides whether the Issue No. 10 downside is a fee or a redesign.")
+        height_conf = {"Unknown": None, "Conforming": True, "Nonconforming": False}[hc]
+        st.markdown('<span class="cite">If the prior structure was <b>nonconforming in '
+                    'height</b>, the certified de minimis waiver allows <b>no additional '
+                    'height at all</b>. Old Malibu beach stock frequently is. Get it from '
+                    'the survey and permit record before closing.</span>',
+                    unsafe_allow_html=True)
+    with c7:
+        over_cap = st.checkbox(
+            "Model a build that EXCEEDS the 10% cap",
+            help="On beachfront this may cost a permanent public access dedication.")
+        st.markdown('<span class="cite">On beachfront, breaking the cap makes you '
+                    '&quot;new development&quot; for PRC 30212 — which requires public '
+                    'access to the shoreline. Not a timeline problem. An exit '
+                    'problem.</span>', unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -294,9 +323,17 @@ with tab_one:
             st.markdown(f'<div class="card">{t.reason}</div>', unsafe_allow_html=True)
             # Envelope math is Interp. No. 24 — Malibu only. Never run it elsewhere.
             if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
-                spr = spr_check(beachfront, proposed_ceiling, storeys_build)
+                cliff = access_dedication_warning(beachfront, over_cap)
+                if cliff:
+                    st.markdown(f'<div class="card card-warn">{cliff}</div>',
+                                unsafe_allow_html=True)
+                spr = spr_check(beachfront, proposed_ceiling, 1,
+                                spend_allowance_vertically=spend_vert)
                 if spr:
                     st.markdown(f'<div class="card">{spr}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="card card-note">'
+                            f'{height_conformity_flag(conforming=height_conf)}</div>',
+                            unsafe_allow_html=True)
                 ph, basis = ceiling_from_year(p.year_built, prior_override or None)
                 if ph:
                     both = envelope_both_cases(p.prior_sqft, ph, proposed_ceiling, basement)
@@ -341,6 +378,29 @@ with tab_one:
                     <span class="binding">→ {e['binding']} binds at {e['gross']:,} sf</span><br>
                     <span class="cite">prior ceiling: {basis}</span>
                     </div>""", unsafe_allow_html=True)
+
+                    rp = realistic_program(p.prior_sqft, ph, proposed_ceiling, basement)
+                    st.markdown(f"""<div class="card">
+                    <b>What you can actually build without a CDP</b><br>
+                    Primary as of right <b>{rp['primary_as_of_right']:,} sf</b> &nbsp;·&nbsp;
+                    if the +10% is granted <b>{rp['primary_if_granted']:,} sf</b><br>
+                    Plus an <b>ADU up to {rp['adu_max']:,} sf</b> — Ordinance 524's cap, with the
+                    garage (400 sf) and attached decks excluded from it. <b>It does not consume
+                    the 110%.</b> AB 462 (Oct 2025) killed Coastal Commission appeal authority
+                    over local ADU CDPs and imposed a 60-day clock. Most underrated lever
+                    available.<br><br>
+                    <b>Realistic ceiling: ~{rp['total_if_granted']:,} sf across TWO units.</b>
+                    <span class="cite">{rp['note']}<br><br>
+                    That is a well-located small house with a guest unit. It is not the thing
+                    that trades against Malibu beachfront comps. If the model needs a single
+                    integrated 2,700+ sf luxury envelope, the exemption path does not produce
+                    it. The lot may still work — as a small-house thesis, priced against
+                    small-house comps, underwritten on speed and land basis. That's a real
+                    strategy. It's a different strategy.</span>
+                    </div>""", unsafe_allow_html=True)
+
+                    st.markdown(f'<div class="card card-note">{pf1_check()}</div>',
+                                unsafe_allow_html=True)
 
                     with st.expander("What you inherit as a purchaser — diligence, not model inputs",
                                      expanded=False):
@@ -493,6 +553,15 @@ against the same 110% (Issue No. 5). Multifamily prior use triggers No Net Loss 
 (MMC 17.60.020(C) / Ordinance 524) is granted *"at the discretion of the planning director."*
 The tool shows both: as-of-right, and if-granted. Model the first.
 
+**Breaking the 10% cap on beachfront is a cliff, not a slope.** The LIP's "New Development"
+exclusion is conditional and the cap is the condition. Exceed it and you become new development
+for PRC 30212 — which requires public access from the nearest public roadway to the shoreline.
+The Commission applied exactly this in Malibu in 2011. Armoring flips too: replacement
+structures get a seawall via director-level permit; new development runs into the LCP policy
+that development requiring armoring should be prohibited. So it isn't "small house quickly or
+large house slowly" — on beachfront it's "large house, maybe, with conditions that may destroy
+the reason you wanted it large."
+
 **Interpretation No. 24 is not certified LCP text.** Ordinance 524 went to the Coastal
 Commission and was certified 10 Apr 2025 as a minor amendment. Interpretation No. 24 was
 adopted by City Council alone and was not. Where the LCP and a City resolution conflict, the
@@ -537,7 +606,9 @@ height; enter it and the guess goes away.
 
 - **The 110% height cap.** Only bulk and square footage are computed. A design can pass here and fail on height.
 - **Issue No. 7's ≤10ft-apart test.** Multiple structures are summed and flagged, not combined per the rule.
-- **Setbacks, FAR, zoning compliance.** Issue No. 9 requires the +10% to comply with current zoning; only the 18ft height trigger is checked.
+- **Setbacks, FAR, zoning compliance.** Only the 18ft SPR trigger is checked.
+- **Whether SPR is appealable** to the Planning Commission and then Council. Unverified, and it materially changes tail risk.
+- **Cycle times.** No reliable post-fire Malibu SPR or planning-verification data exists. Any month figure here is an estimate.
 - **Everything after entitlement.** Cost, carry, comps, exit, insurance, coastal engineering, debris, septic, seawall.
 
 This is a screen. It tells you whether a lot is worth an afternoon. It does not underwrite one.

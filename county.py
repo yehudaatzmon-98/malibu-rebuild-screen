@@ -496,49 +496,287 @@ def purchaser_diligence(p: Parcel) -> list:
     return flags
 
 
-def spr_check(is_beachfront: Optional[bool], proposed_ceiling: float,
-              storeys_proposed: int = 1) -> Optional[str]:
+def realistic_program(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
+                      basement_sqft: float = 0.0):
     """
-    Interpretation No. 24, Issue No. 9 — THE +10% IS NOT ALWAYS MINISTERIAL.
+    What you can actually build without a CDP — the honest ceiling.
 
-    The 10% increases must comply with current zoning. On NON-BEACHFRONT properties,
-    an increase to height or bulk above 18 feet requires SITE PLAN REVIEW
-    (MMC 17.62.040). Increases into required setbacks likewise require SPR, with de
-    minimis encroachments possible at Director / Planning Manager discretion.
+    The exemption envelope is not the whole story. Legitimate additions on top:
 
-    WHY THIS MATTERS MORE THAN IT LOOKS
-    Five of the seven PCH lots in the current set are Las Flores — non-beachfront.
-    So on the majority of the set the "express" +10% is a DISCRETIONARY approval
-    carrying timeline and denial risk, not an automatic one.
+      ADU up to 1,000 sf (Ordinance 524's cap), with the garage (400 sf max) and
+      attached exterior decks/overhangs EXCLUDED from that limit. AB 462 (urgency
+      statute, 10 Oct 2025) eliminated Coastal Commission appeal authority over
+      local CDPs for ADUs and imposed a 60-day local clock. SB 1077 required the
+      Commission and HCD to publish coastal-zone ADU streamlining guidance by
+      1 July 2026 — that date has passed; check what actually issued.
 
-    It also compounds with the ceiling-height election: raising ceilings is exactly
-    what drives height above 18ft. The move that shrinks the envelope via the volume
-    cap is the same move that triggers SPR. The two constraints bite together.
+      This is the most underrated lever available. It does not consume the 110%.
 
-    Beachfront status is NOT in the county record. It has to be supplied — it is
-    determinable per parcel from the City's GIS layers.
+    Also real but small: Issue No. PF3 (Palisades, beachfront) — interior access
+    stairs required by code because of the new FEMA finished-floor don't count
+    toward the 10%. A free staircase.
+
+    Water tanks required by an agency are excluded from TDSF — note that is a TDSF
+    exclusion, NOT a 110% exclusion, and it applies to tanks, not living space.
+    Don't overread it.
+
+    THE HONEST CONCLUSION
+    On a 1,760 sf prior: ~1,936 sf primary + up to ~1,000 sf ADU = ~2,900 sf across
+    TWO units, one an accessory unit with its own kitchen and entry.
+
+    That is a well-located small house with a guest unit. It is not the thing that
+    trades against Malibu beachfront comps. If the model needs a single integrated
+    2,700+ sf luxury envelope, the exemption path does not produce it.
+
+    The lot may still work — as a small-house thesis, priced against small-house
+    comps, underwritten on speed and land basis rather than square footage. That is
+    a real strategy. It is a different strategy.
+    """
+    both = envelope_both_cases(prior_sqft, prior_ceiling, proposed_ceiling, basement_sqft)
+    primary_aor = both["as_of_right"]["habitable"]
+    primary_ifg = both["if_granted"]["habitable"]
+    adu_max = 1000
+    return dict(
+        primary_as_of_right=primary_aor,
+        primary_if_granted=primary_ifg,
+        adu_max=adu_max,
+        garage_free=400,
+        total_as_of_right=primary_aor + adu_max,
+        total_if_granted=primary_ifg + adu_max,
+        note=("Two units, not one integrated envelope. The ADU has its own kitchen and "
+              "entry and does not consume the 110%."),
+    )
+
+
+def access_dedication_warning(is_beachfront: Optional[bool],
+                              exceeds_10pct: bool) -> Optional[str]:
+    """
+    THE CLIFF. Breaking the 10% cap on beachfront may cost a permanent public
+    access dedication — not just time.
+
+    The LIP's "New Development" exclusion is CONDITIONAL, and the 10% cap is the
+    condition:
+
+      "For purposes of implementing the public access requirements of Public
+       Resources Code Section 30212 ... 'new development' includes 'development' ...
+       except for the following: a. Structures destroyed by natural disaster: The
+       replacement of any structure ... PROVIDED THAT the replacement structure
+       conforms to applicable existing zoning requirements, is for the same use ...
+       DOES NOT EXCEED either the floor area, height, or bulk of the destroyed
+       structure BY MORE THAN 10%, is sited in the same location ... and does not
+       extend the replacement structure seaward on a sandy beach or beach fronting
+       bluff lot."
+
+    Break the cap and you are not merely losing a shortcut. You become "new
+    development" for public access purposes, and PRC 30212(a) requires that public
+    access from the nearest public roadway to the shoreline be provided in new
+    development projects.
+
+    The Commission has applied exactly this in Malibu. 2011 appeal, staff analysis:
+    the 30212(b) exceptions didn't apply because "the project is not the replacement
+    of a structure destroyed in a disaster... the demolition of the existing
+    single-family residence and reconstruction of the proposed home will increase
+    the floor area by more than 10 percent as compared to the existing home...
+    Therefore, the City was correct by processing this application as a new
+    development."
+
+    SECOND CASCADE — ARMORING. The LCP requires new development on the beach or
+    oceanfront bluff to be set back as far as possible and elevated above base flood
+    elevation, and provides that new development requiring shoreline armoring
+    SHOULD BE PROHIBITED. Meanwhile Ordinance 524 gives REPLACEMENT structures a
+    director-level rebuild permit path for new seawalls protecting an OWTS. That
+    asymmetry is enormous on beachfront. Replacement structure: seawall via
+    director. New development: armoring policy runs against you.
+
+    THIRD — SEA LEVEL RISE. Under current Commission guidance, properties in
+    projected 75-year inundation zones face enhanced setback, hardening and
+    removability requirements; some Malibu and Manhattan Beach projects have been
+    conditioned with adaptive-use clauses and conditional removal triggers. A
+    conditional-removal covenant on a beachfront spec product is a financing and
+    exit problem, not a design detail.
+
+    So the correct framing is NOT "small house quickly or large house slowly." On
+    beachfront it is: "large house, maybe, with conditions that may destroy the
+    reason you wanted it large."
+    """
+    if not exceeds_10pct:
+        return None
+    if is_beachfront:
+        return ("<b>STOP — exceeding the 10% on beachfront may cost a public access "
+                "dedication.</b><br>"
+                "The LIP's 'New Development' exclusion is <b>conditional</b>, and the 10% cap "
+                "is the condition. Break it and you become 'new development' for public "
+                "access purposes — and PRC 30212(a) requires public access from the nearest "
+                "public roadway to the shoreline in new development projects.<br><br>"
+                "<b>The Commission has applied this in Malibu.</b> A 2011 appeal: the "
+                "exceptions didn't apply because the project wasn't a disaster replacement "
+                "and increased floor area by more than 10% — <i>'Therefore, the City was "
+                "correct by processing this application as a new development.'</i><br><br>"
+                "That is a permanent recorded encumbrance that hits the exit comp directly. "
+                "<b>No amount of patience solves it.</b><br><br>"
+                "<b>Armoring flips too.</b> Replacement structures get a seawall through a "
+                "director-level rebuild permit (Ordinance 524). New development runs into the "
+                "LCP policy that development requiring shoreline armoring should be "
+                "<i>prohibited</i>.<br><br>"
+                "<b>And sea level rise.</b> Properties in projected 75-year inundation zones "
+                "face enhanced setback, hardening and removability conditions. Some Malibu "
+                "projects have been conditioned with adaptive-use clauses and conditional "
+                "removal triggers. A conditional-removal covenant on a beachfront spec "
+                "product is a financing and exit problem, not a design detail.<br><br>"
+                "<span class='cite'>The framing isn't 'small house quickly or large house "
+                "slowly.' On beachfront it's 'large house, maybe, with conditions that may "
+                "destroy the reason you wanted it large.'</span>")
+    return ("<b>Exceeding the 10% forfeits the exemption.</b> You leave Interpretation No. 24 "
+            "entirely and enter the ordinary LCP: full CDP, hazard chapter, TDSF limits. The "
+            "beachfront access-dedication cascade under PRC 30212 doesn't apply here, but the "
+            "timeline does — Malibu's published 12-24 months is a floor, not a range.")
+
+
+def spr_check(is_beachfront: Optional[bool], proposed_ceiling: float,
+              storeys_proposed: int = 1, prior_height_ft: Optional[float] = None,
+              spend_allowance_vertically: bool = False) -> Optional[str]:
+    """
+    Interpretation No. 24, Issue No. 9 — SPR IS TRIGGERED BY THE *INCREASE*,
+    NOT BY THE STRUCTURE'S HEIGHT.
+
+    Earlier versions of this function got this wrong and flagged SPR on any
+    non-beachfront lot whose total height cleared 18ft. That is not what the
+    ordinance says.
+
+    Issue No. 9: "increases to height or bulk above 18 feet shall require a site
+    plan review (SPR) on non-beachfront properties."
+    Ordinance 524: "Increased height or bulk on non-beachfront properties shall not
+    exceed 18 feet, unless a site plan review is obtained."
+
+    The subject of both sentences is the INCREASE. Rebuild a 24ft Las Flores house
+    at 24ft and nothing is increased — no SPR on height. You only hit SPR when you
+    spend the +10% VERTICALLY past 18ft, or when (per Issue No. 1) bulk is shifted
+    to other parts of the structure and that bulk exceeds 18ft in height AND sits
+    outside the original building envelope.
+
+    THE DESIGN INSTRUCTION THAT FOLLOWS
+    Take the 10% laterally. Keep the roofline at prior height. Stay inside the
+    original envelope. That avoids SPR entirely. And since the allowance is
+    bulk-constrained anyway — you generally cannot have both height and area —
+    spending it horizontally is close to free.
+
+    If SPR IS needed it is director-level, not a Planning Commission hearing. But
+    it notices property owners within 500ft (no fewer than 10 developed
+    properties), and 1,000ft in RR-10/RR-20 zones. Ordinance 524 added
+    MMC 17.62.040(A)(13) covering non-beachfront development over 18ft on
+    RELOCATED replacement structures — with 1,000ft noticing. Move the structure
+    and the radius quintuples along with your comment exposure.
+
+    The standard is "substantial evidence supports the findings" after consultation
+    with six specialists. Not a rubber stamp. In a city that has issued roughly two
+    dozen permits in a year, "routine" is not a word to lean on.
+
+    UNVERIFIED: whether SPR decisions are appealable to the Planning Commission and
+    then Council under Malibu's code. That materially changes tail risk. Ask counsel.
     """
     if is_beachfront is None:
-        return ("<b>SPR STATUS UNKNOWN.</b> Beachfront or not? Not in the county record. "
-                "If this lot is NON-beachfront, any increase to height or bulk above 18ft "
-                "requires Site Plan Review [Issue No. 9] — meaning the +10% is "
-                "discretionary, not ministerial, with timeline and denial risk. "
-                "Determinable per parcel from the City's GIS appeal-zone / beachfront "
-                "layers. Five of the seven current PCH lots are Las Flores, non-beachfront.")
+        return ("<b>SPR status unknown — beachfront or not?</b> Not in the county record. "
+                "On NON-beachfront lots, spending the +10% vertically past 18ft triggers "
+                "Site Plan Review [Issue No. 9]. Determinable per parcel from the City's "
+                "GIS layers. Note the trigger is the <i>increase</i>, not the structure — "
+                "rebuild at prior height and no SPR is triggered on height.")
     if is_beachfront:
         return None
-    est_height = proposed_ceiling * storeys_proposed
-    if est_height > 18:
-        return (f"<b>SITE PLAN REVIEW REQUIRED [Issue No. 9].</b> Non-beachfront, and "
-                f"{storeys_proposed} storey(s) at {proposed_ceiling}ft is ~{est_height:.0f}ft "
-                f"— above the 18ft threshold (MMC 17.62.040). <b>The +10% here is a "
-                f"discretionary approval, not ministerial.</b> Carries timeline and denial "
-                f"risk that the express-lane framing does not. Note this compounds with the "
-                f"ceiling election: raising ceilings shrinks the envelope via the volume cap "
-                f"AND triggers SPR.")
-    return (f"<span class='cite'>Non-beachfront, ~{est_height:.0f}ft proposed — under the "
-            f"18ft SPR threshold [Issue No. 9]. Setback encroachments would still "
-            f"trigger review.</span>")
+
+    if not spend_allowance_vertically:
+        return ("<span class='cite'><b>No SPR triggered on height.</b> Non-beachfront, and "
+                "you're taking the allowance laterally at prior roofline. The trigger is the "
+                "<i>increase</i> above 18ft, not the structure's height — rebuild a 24ft "
+                "house at 24ft and nothing is increased [Issue No. 9]. Bulk shifted outside "
+                "the original envelope above 18ft would still trigger it [Issue No. 1]. "
+                "Setback encroachments trigger review separately.</span>")
+
+    return ("<b>SITE PLAN REVIEW REQUIRED [Issue No. 9].</b> Non-beachfront, and you're "
+            "spending the +10% vertically past 18ft. Director-level, not a hearing — but it "
+            "notices owners within 500ft (min 10 developed properties), and the standard is "
+            "'substantial evidence supports the findings' after consultation with six "
+            "specialists. Model <b>3-6 months</b>, and treat that as an estimate: no reliable "
+            "post-fire Malibu SPR cycle-time data exists.<br><br>"
+            "<b>You probably don't need this.</b> The allowance is bulk-constrained — you "
+            "generally can't have both height and area. Take the 10% laterally, keep the "
+            "roofline at prior height, stay inside the original envelope, and SPR goes away. "
+            "On the Las Flores lots that is close to free.<br><br>"
+            "<span class='cite'>If you also RELOCATE the structure, Ordinance 524's new "
+            "MMC 17.62.040(A)(13) applies and the notice radius goes to 1,000ft.</span>")
+
+
+def height_conformity_flag(prior_height_ft: Optional[float] = None,
+                           conforming: Optional[bool] = None) -> str:
+    """
+    THE SINGLE DILIGENCE ITEM THAT COLLAPSES THE ISSUE No. 10 UNCERTAINTY.
+
+    The certified DMW (LIP 13.4.11(A)(4)) is the safety net if Issue No. 10's
+    reasoning is challenged — it waives FEMA-driven finished-floor increases. But
+    it has a hard wall:
+
+      "The height of the structure from the finished floor to the roof may remain
+       the same as existed for the prior structure even if the prior structure was
+       nonconforming in height. NO ADDITIONAL HEIGHT SHALL BE ALLOWED for the
+       replacement structure if it has a nonconforming height. A conforming
+       structure shall not be granted an additional height increase if it creates
+       a nonconforming height."
+
+    So: if the prior beach house was nonconforming in height — common on old Malibu
+    beach stock — the +10% height allowance is GONE ENTIRELY, Issue No. 10 or not.
+    And if the wave-uprush floor pushes you over, the DMW gives you nothing and
+    you're at a full CDP.
+
+    This one fact decides whether the Issue No. 10 downside is a fee or a redesign.
+    Get it from the survey and the permit record BEFORE closing.
+    """
+    if conforming is None:
+        return ("<b>PRIOR HEIGHT CONFORMITY — get this before you close.</b> Was the prior "
+                "structure conforming in height? Not in the county record. This single fact "
+                "decides whether the Issue No. 10 downside is a fee or a redesign.<br>"
+                "If the prior structure was <b>nonconforming in height</b>, the certified "
+                "de minimis waiver (LIP 13.4.11(A)(4)) allows <b>no additional height at "
+                "all</b> — the +10% height allowance is gone regardless of Issue No. 10. And "
+                "if a wave-uprush floor pushes you over, the DMW gives you nothing and you're "
+                "at a full CDP. Old Malibu beach stock is frequently nonconforming. Get it "
+                "from the survey and permit record.")
+    if conforming is False:
+        return ("<b>PRIOR STRUCTURE NONCONFORMING IN HEIGHT — the +10% height allowance is "
+                "gone.</b> Per the certified DMW (LIP 13.4.11(A)(4)): 'No additional height "
+                "shall be allowed for the replacement structure if it has a nonconforming "
+                "height.' Spend the allowance laterally; there is no vertical option here. "
+                "And the Issue No. 10 tail risk is concentrated on exactly these lots — if a "
+                "wave-uprush floor drives elevation up, the DMW offers nothing and the "
+                "fallback is a full CDP.")
+    return ("<span class='cite'>Prior structure conforming in height. The certified DMW "
+            "(LIP 13.4.11(A)(4)) is available as a fallback if Issue No. 10's FEMA-elevation "
+            "reading is challenged — but note it may not grant an increase that would itself "
+            "create a nonconforming height.</span>")
+
+
+def pf1_check() -> str:
+    """
+    Issue No. PF1 — THE SLEEPER. Nobody is asking about this.
+
+    "If a property owner had a deemed complete application prior to the fire, the
+     property owner is allowed to construct both the replacement structure and the
+     deemed complete application" — the combined result treated as the like-for-like.
+
+    This is the one legitimate path to a materially larger envelope INSIDE the
+    exemption, and it appears to attach to the property. If a lot has a
+    deemed-complete addition in the file as of January 6 2025, that is a
+    repriceable asset the seller very likely does not know they own.
+
+    Ask every seller. It costs one question.
+    """
+    return ("<b>ASK THE SELLER: was there a deemed-complete application on file on "
+            "January 6, 2025?</b> [Issue No. PF1]<br>"
+            "If yes, the owner may construct <b>both</b> the replacement structure "
+            "<b>and</b> the deemed-complete application, with the combined result treated as "
+            "like-for-like. That is the only clean path to a materially larger envelope "
+            "inside the exemption, and it appears to attach to the property.<br>"
+            "<span class='cite'>Nobody is asking this. A lot with a deemed-complete addition "
+            "in the file is a repriceable asset the seller probably doesn't know they own. "
+            "One question per lot.</span>")
 
 
 def envelope(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
