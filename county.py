@@ -429,6 +429,73 @@ def ceiling_sensitivity(prior_sqft: float, proposed_ceiling: float,
     return out
 
 
+def purchaser_diligence(p: Parcel) -> list:
+    """
+    What a PURCHASER inherits that a pre-fire owner never had to think about.
+
+    The rebuild relief goes with the land — Malibu's own rebuild FAQ says the
+    in-kind rebuild rights "go with the land" and a new owner can use the
+    expedited processes and CDP exemptions provided the deadlines are met. The
+    legislative record confirms it: SB 1229 (Allen) WOULD limit the CDP exemption
+    to the owner of record immediately preceding the disaster — you cannot close a
+    loophole that does not exist. Allen has said it is prospective and would not
+    apply to the 2025 fires. Track it to the Assembly floor anyway.
+
+    But three things attach to the PROPERTY and land on the buyer, and none are in
+    the parcel record. They are diligence items, not model inputs.
+    """
+    flags = []
+
+    flags.append(
+        "<b>FEE-WAIVER COVENANT — check before offer.</b> Malibu's fee waiver is "
+        "person-based: it requires the property to have been the owner's primary "
+        "residence at the fire date, proven by notarised affidavit, and a covenant is "
+        "recorded against the property. <b>If the property sells before Certificate of "
+        "Occupancy, waived fees must be reimbursed within 90 days and development is "
+        "halted until they are.</b> If a seller took the waiver and you buy pre-CO, you "
+        "acquire a recorded covenant with a live reimbursement obligation and a stop-work "
+        "trigger. Confirm whether the seller waived, whether an affidavit is recorded, and "
+        "who pays.")
+
+    flags.append(
+        "<b>TEMPORARY HOUSING HISTORY — penalty attaches to the property.</b> Ordinance "
+        "524 restricts temporary housing to fire-date occupants. Violation removes the "
+        "structures, bars the property from temporary housing for <b>five years</b>, and "
+        "carries $1,000/day fines with possible liens <b>on the property</b>. Check any "
+        "lot where a seller placed a trailer.")
+
+    flags.append(
+        "<b>BUY THE EVIDENCE WITH THE DIRT.</b> Bulk is the binding constraint and it is "
+        "total interior cubic volume of a building that no longer exists. A pre-fire owner "
+        "has plans, photos, insurance measurements, memory. A purchaser has the Assessor "
+        "and aerials. Issue No. 12 hard-requires a survey at Planning Verification. Make "
+        "delivery of plans, surveys, insurance measurements, photos, prior CDPs and "
+        "contractor files a condition of the PSA. This is the most underrated diligence "
+        "item on the list.")
+
+    flags.append(
+        "<b>THE CLOCK RUNS FROM THE FIRE, NOT FROM ACQUISITION.</b> Palisades Fire "
+        "7 Jan 2025 → planning application by <b>Jan 2031</b>, building permit by "
+        "<b>Jan 2033</b>. Extensions from the Planning Commission on an undue-hardship "
+        "finding cap at 2034 / 2036. A purchaser inherits the remaining clock, not a fresh "
+        "one — which is exactly what a property-attached right looks like. Confirm no prior "
+        "application has been filed and abandoned in a way that complicates the record.")
+
+    if p.n_structures and p.n_structures > 1:
+        flags.append(
+            "<b>ISSUE No. 7 IS AIMED AT THIS.</b> The stated rationale is avoiding "
+            "<i>\"consolidation of dispersed structures into a larger home that could have "
+            "impacts on views or other sensitive resources.\"</i> Structures combine only "
+            "if ≤10ft apart, use must be maintained, and uninhabitable square footage (a "
+            "garage) must stay uninhabitable. It is the policy most likely to be applied "
+            "firmly against a developer assembling square footage. <b>Lot assembly gets you "
+            "nothing either</b> — relief is per-structure, per-pad, sited substantially in "
+            "the same location. Two adjacent razed lots give you two like-for-like "
+            "envelopes, not one merged one.")
+
+    return flags
+
+
 def spr_check(is_beachfront: Optional[bool], proposed_ceiling: float,
               storeys_proposed: int = 1) -> Optional[str]:
     """
@@ -480,11 +547,36 @@ def envelope(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
     Interp. No. 24, Issue No. 1 — THREE SIMULTANEOUS CEILINGS.
     "does not exceed 110 percent the bulk (volume), square footage, or height"
 
-        buildable = min( prior_sqft x 1.10 , (prior_volume x 1.10) / proposed_ceiling )
+        buildable = min( prior_sqft x factor , (prior_volume x factor) / proposed_ceiling )
 
     The volume cap binds whenever proposed ceiling height > prior ceiling height.
     Basements and subterranean garages count toward the same 110% [Issue No. 5]
     and carry no finished exit value per sf.
+
+    ---------------------------------------------------------------------------
+    THE +10% IS DISCRETIONARY. THE LIKE-FOR-LIKE BASE IS NOT.
+    ---------------------------------------------------------------------------
+    Two different legal instruments are doing work here and they have different
+    characters:
+
+      LIP 13.4.6 (CDP exemption) is CRITERIA-BASED. Same use, within 10% of floor
+      area / height / bulk, sited substantially in the same location. Meet the
+      three tests and no permit is required. No discretion.
+
+      MMC 17.60.020(C) as amended by Ordinance 524 (the zoning +10%) is
+      DISCRETIONARY BY ITS OWN TERMS: structures "may be permitted, AT THE
+      DISCRETION OF THE PLANNING DIRECTOR through approval of a planning
+      verification, to increase the square footage, height or bulk permitted by
+      this title by 10 percent."
+
+    So a purchaser has the same right to like-for-like reconstruction as the
+    pre-fire owner. The "+10%" half of "like-for-like +10%" is, on the face of the
+    code, a discretionary grant. In practice it appears routine — Interpretation
+    No. 24 spends twelve issues on HOW to calculate it, not WHETHER to give it.
+    But underwriting it as certain is not supported by the code text, and it is
+    the obvious lever if anyone wanted one.
+
+    Pass factor=1.00 for the like-for-like base case. Model that standalone.
     """
     sqft_cap = prior_sqft * factor
     prior_volume = prior_sqft * prior_ceiling
@@ -497,4 +589,26 @@ def envelope(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
         sqft_cap=round(sqft_cap), vol_cap=round(vol_cap),
         binding=binding, prior_volume=round(prior_volume),
         haircut_vs_prior=(gross / prior_sqft) - 1.0,
+        factor=factor,
+        discretionary=(factor > 1.0),
+    )
+
+
+def envelope_both_cases(prior_sqft: float, prior_ceiling: float,
+                        proposed_ceiling: float, basement_sqft: float = 0.0):
+    """
+    Both cases, always, because they have different legal characters.
+
+    AS OF RIGHT  — like-for-like at 100%. Criteria-based under LIP 13.4.6.
+    IF GRANTED   — the +10% at the Planning Director's discretion under
+                   MMC 17.60.020(C) / Ordinance 524.
+
+    A screen that prints only the 110% number is underwriting a discretionary
+    grant as if it were an entitlement.
+    """
+    return dict(
+        as_of_right=envelope(prior_sqft, prior_ceiling, proposed_ceiling,
+                             basement_sqft, factor=1.00),
+        if_granted=envelope(prior_sqft, prior_ceiling, proposed_ceiling,
+                            basement_sqft, factor=1.10),
     )

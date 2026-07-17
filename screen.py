@@ -15,8 +15,8 @@ import re
 import pandas as pd
 import streamlit as st
 
-from county import (lookup, triage, envelope, ceiling_from_year, split_address,
-                    ceiling_sensitivity, spr_check)
+from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_year,
+                    split_address, ceiling_sensitivity, spr_check, purchaser_diligence)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -299,7 +299,9 @@ with tab_one:
                     st.markdown(f'<div class="card">{spr}</div>', unsafe_allow_html=True)
                 ph, basis = ceiling_from_year(p.year_built, prior_override or None)
                 if ph:
-                    e = envelope(p.prior_sqft, ph, proposed_ceiling, basement)
+                    both = envelope_both_cases(p.prior_sqft, ph, proposed_ceiling, basement)
+                    aor, ifg = both["as_of_right"], both["if_granted"]
+                    e = ifg  # kept for the working below
                     k1, k2, k3 = st.columns(3)
                     with k1:
                         st.markdown(f'<div class="figure-label">what burned</div>'
@@ -307,20 +309,56 @@ with tab_one:
                                     f'<span class="sourced">SOURCED · county</span>',
                                     unsafe_allow_html=True)
                     with k2:
-                        st.markdown(f'<div class="figure-label">what you can build</div>'
-                                    f'<div class="figure">{e["habitable"]:,}</div>'
-                                    f'<span class="binding">{e["haircut_vs_prior"]:+.0%} vs prior</span>',
+                        st.markdown(f'<div class="figure-label">as of right</div>'
+                                    f'<div class="figure">{aor["habitable"]:,}</div>'
+                                    f'<span class="sourced">CRITERIA-BASED · LIP 13.4.6</span>',
                                     unsafe_allow_html=True)
                     with k3:
-                        st.markdown(f'<div class="figure-label">binding ceiling</div>'
-                                    f'<div class="figure" style="font-size:1.1rem;padding-top:12px">'
-                                    f'{e["binding"]}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="figure-label">if the +10% is granted</div>'
+                                    f'<div class="figure">{ifg["habitable"]:,}</div>'
+                                    f'<span class="assumed">DISCRETIONARY · MMC 17.60.020(C)</span>',
+                                    unsafe_allow_html=True)
+
+                    st.markdown(f"""<div class="card card-warn">
+                    <b>The +10% is a discretionary grant, not an entitlement.</b><br>
+                    Two instruments are doing work here and they have different characters.
+                    The CDP exemption (LIP 13.4.6) is <b>criteria-based</b> — same use, within
+                    10% of floor area/height/bulk, substantially the same location. Meet the
+                    three tests, no permit, no discretion. But the zoning +10%
+                    (MMC 17.60.020(C), as amended by Ordinance 524) reads: structures
+                    <i>"may be permitted, <b>at the discretion of the planning director</b>
+                    through approval of a planning verification, to increase the square
+                    footage, height or bulk permitted by this title by 10 percent."</i><br><br>
+                    In practice it appears routine — Interpretation No. 24 spends twelve issues
+                    on <i>how</i> to calculate it, not <i>whether</i> to grant it. But the code
+                    text doesn't support underwriting it as certain, and it is the obvious lever
+                    if anyone wanted one. <b>Here it's worth {ifg['gross'] - aor['gross']:,} sf.</b>
+                    Model {aor['habitable']:,} as the base case.
+                    </div>""", unsafe_allow_html=True)
                     st.markdown(f"""<div class="card mono" style="font-size:0.75rem">
                     sqft ceiling &nbsp; {p.prior_sqft:,} × 1.10 = <b>{e['sqft_cap']:,}</b><br>
                     volume ceiling &nbsp; ({p.prior_sqft:,} × {ph}ft × 1.10) ÷ {proposed_ceiling}ft = <b>{e['vol_cap']:,}</b><br>
                     <span class="binding">→ {e['binding']} binds at {e['gross']:,} sf</span><br>
                     <span class="cite">prior ceiling: {basis}</span>
                     </div>""", unsafe_allow_html=True)
+
+                    with st.expander("What you inherit as a purchaser — diligence, not model inputs",
+                                     expanded=False):
+                        st.markdown('<span class="cite">The rebuild relief goes with the land. '
+                                    'Malibu\'s own rebuild FAQ says the in-kind rights "go with '
+                                    'the land" and a new owner can use the expedited processes and '
+                                    'CDP exemptions provided the deadlines are met. The legislative '
+                                    'record confirms it: <b>SB 1229 (Allen) would limit the CDP '
+                                    'exemption to the owner of record immediately preceding the '
+                                    'disaster</b> — you cannot close a loophole that does not exist. '
+                                    'Allen has said it is prospective and would not apply to the 2025 '
+                                    'fires. Track it to the Assembly floor anyway.<br><br>'
+                                    'But these attach to the PROPERTY and land on the buyer. None are '
+                                    'in the parcel record.</span>', unsafe_allow_html=True)
+                        st.write("")
+                        for f in purchaser_diligence(p):
+                            st.markdown(f'<div class="card card-note">{f}</div>',
+                                        unsafe_allow_html=True)
 
                     if not prior_override:
                         rows_s = ceiling_sensitivity(p.prior_sqft, proposed_ceiling, basement)
@@ -374,10 +412,13 @@ with tab_batch:
             # indicative bracket — check the pre-fire listing per address in the other tab.
             t = triage(p, listing_sqft=listing_sqft)
             env = None
+            env_aor = None
             if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
                 ph, _ = ceiling_from_year(p.year_built, prior_override or None)
                 if ph:
-                    env = envelope(p.prior_sqft, ph, proposed_ceiling, basement)
+                    _both = envelope_both_cases(p.prior_sqft, ph, proposed_ceiling, basement)
+                    env_aor = _both["as_of_right"]
+                    env = _both["if_granted"]
             rows.append(dict(
                 Address=addr,
                 Verdict=t.verdict,
@@ -386,7 +427,8 @@ with tab_batch:
                 Lot_sf=p.lot_sqft,
                 Built=p.year_built,
                 Units=p.units,
-                Buildable_sf=env["habitable"] if env else None,
+                As_of_right_sf=env_aor["habitable"] if env_aor else None,
+                If_granted_sf=env["habitable"] if env else None,
                 Binding=env["binding"] if env else None,
                 Delta=f'{env["haircut_vs_prior"]:+.0%}' if env else None,
                 Ask=r.get("PRICE"),
@@ -415,8 +457,10 @@ with tab_batch:
                 bits = []
                 if pd.notna(x.Prior_sf):
                     bits.append(f"{int(x.Prior_sf):,} sf burned")
-                if pd.notna(x.Buildable_sf):
-                    bits.append(f"<b>{int(x.Buildable_sf):,} sf buildable ({x.Delta})</b>")
+                if pd.notna(x.As_of_right_sf):
+                    bits.append(f"<b>{int(x.As_of_right_sf):,} sf as of right</b>")
+                if pd.notna(x.If_granted_sf):
+                    bits.append(f"{int(x.If_granted_sf):,} if +10% granted")
                 if pd.notna(x.Ask):
                     bits.append(f"${x.Ask:,.0f}")
                 why = str(x.Why)
@@ -443,8 +487,23 @@ with st.expander("What this tool does and doesn't know", expanded=False):
 Caps bulk (volume), square footage, **and** height, each at 110% of the prior structure.
 Three ceilings, all binding at once (Issue No. 1). Basements and subterranean garages count
 against the same 110% (Issue No. 5). Multifamily prior use triggers No Net Loss (Issue No. 8).
-On non-beachfront lots, any increase above 18ft needs Site Plan Review — so the +10% is
-discretionary there, not automatic (Issue No. 9).
+
+**The +10% is discretionary.** Two instruments, two characters: the CDP exemption
+(LIP 13.4.6) is criteria-based — meet three tests, no permit, no discretion. The zoning +10%
+(MMC 17.60.020(C) / Ordinance 524) is granted *"at the discretion of the planning director."*
+The tool shows both: as-of-right, and if-granted. Model the first.
+
+**Interpretation No. 24 is not certified LCP text.** Ordinance 524 went to the Coastal
+Commission and was certified 10 Apr 2025 as a minor amendment. Interpretation No. 24 was
+adopted by City Council alone and was not. Where the LCP and a City resolution conflict, the
+LCP takes precedence. Issue No. 10's reasoning — using a public-access carve-out, whose own
+precondition is zoning conformity, to establish exemption *from* zoning — is the weakest link,
+and beachfront Malibu sits largely in the Commission's appeal jurisdiction.
+
+**SB 1229 (Allen)** would limit the CDP exemption to the owner of record immediately before
+the disaster. Passed the Senate 29–9 on 19 May 2026; awaiting an Assembly floor vote. Allen
+has said it is prospective and would not apply to the 2025 fires. Its existence is the best
+evidence that a purchaser stands in the pre-fire owner's shoes *today*.
 
 **City of Los Angeles — EO1 / EO8**
 Caps footprint and height at 110%. **Not** volume, **not** gross square footage. A new storey
