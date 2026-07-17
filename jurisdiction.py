@@ -144,7 +144,45 @@ def route(situs_city: Optional[str]) -> Jurisdiction:
              f"a spelling not yet in _MALIBU_SITUS / _LA_SITUS — add it there.")
 
 
-def la_review_note(prior_sqft: Optional[int], year_built: Optional[int]) -> str:
+def la_envelope_indicative(prior_sqft: int, storeys: int, factor: float = 1.10):
+    """
+    INDICATIVE ONLY — not a permitted envelope.
+
+    EO1 caps prior FOOTPRINT at 110%. Gross square footage is not capped, and a new
+    storey is expressly permitted within the footprint and height caps. So the
+    buildable gross is roughly:
+
+        footprint      = prior_sqft / storeys          <- the crude bit
+        footprint_cap  = footprint x 1.10
+        indicative     = footprint_cap x storeys_you_build
+
+    WHY THIS IS TAGGED AND NOT SOURCED
+    Dividing gross by storeys assumes every floor has the same area. Real houses
+    rarely do — a second floor is commonly bedrooms sitting over PART of the ground
+    floor. A 3,339 sf two-storey home might be 2,000 down and 1,339 up, giving a
+    2,000 sf footprint, not 1,670. Under EO1 that difference is 363 sf of permitted
+    footprint and it compounds with every storey built.
+
+    The division is a bracket, not an answer. It tells you whether a lot is worth
+    the LADBS request. It is not the number you underwrite.
+    """
+    if not prior_sqft or not storeys or storeys < 1:
+        return None
+    footprint = prior_sqft / storeys
+    cap = footprint * factor
+    return dict(
+        footprint_est=round(footprint),
+        footprint_cap=round(cap),
+        # what you'd get rebuilding the same number of storeys
+        same_storeys=round(cap * storeys),
+        # EO1 permits a new storey within the height cap
+        plus_one_storey=round(cap * (storeys + 1)),
+        storeys=storeys,
+    )
+
+
+def la_review_note(prior_sqft: Optional[int], year_built: Optional[int],
+                   storeys: Optional[int] = None) -> str:
     """
     What the LA branch says instead of an envelope, and why.
 
@@ -172,7 +210,27 @@ def la_review_note(prior_sqft: Optional[int], year_built: Optional[int]) -> str:
         "EO1's cap is on <b>prior footprint</b>. The Assessor publishes gross square "
         "footage and does not publish footprint or story count.",
     ]
-    if prior_sqft:
+    if prior_sqft and storeys:
+        ind = la_envelope_indicative(prior_sqft, storeys)
+        lines += [
+            "",
+            f"<b>INDICATIVE ONLY — you supplied {storeys} storeys.</b>",
+            f"County shows <b>{prior_sqft:,} sf gross</b> over {storeys} storeys, so the "
+            f"footprint is roughly <b>{ind['footprint_est']:,} sf</b>. "
+            f"EO1 caps that at 110% = <b>{ind['footprint_cap']:,} sf</b> of footprint.",
+            f"&bull; Rebuild {storeys} storeys on it: ~<b>{ind['same_storeys']:,} sf</b> gross.",
+            f"&bull; EO1 permits a new storey within the height cap: "
+            f"~<b>{ind['plus_one_storey']:,} sf</b> gross at {storeys + 1} storeys.",
+            "",
+            "<span class='cite'>TAGGED ESTIMATED-FROM-LISTING, NOT SOURCED. Dividing gross "
+            "by storeys assumes every floor has the same area. Real houses rarely do — a "
+            "second floor is commonly bedrooms over PART of the ground floor. A 3,339 sf "
+            "two-storey home might be 2,000 down and 1,339 up, giving a 2,000 sf "
+            "footprint, not 1,670. That is 363 sf of permitted footprint and it compounds "
+            "with every storey. This is a bracket that tells you whether the lot is worth "
+            "an LADBS request. It is not the number you underwrite.</span>",
+        ]
+    elif prior_sqft:
         lines.append(
             f"County shows <b>{prior_sqft:,} sf gross</b>. If that was single-storey the "
             f"footprint is {prior_sqft:,}; if two-storey it is ~{round(prior_sqft/2):,}. "
@@ -185,9 +243,16 @@ def la_review_note(prior_sqft: Optional[int], year_built: Optional[int]) -> str:
         "Certificate of Occupancy, County Assessor records, or Coastal Commission "
         "documents.",
         "",
-        "<b>How to actually get them (verified 17 Jul 2026):</b>",
-        "&bull; <b>LADBS Atlas</b> — searches permit and Certificate of Occupancy records "
-        "by address. Free, no owner permission. Start here.",
+        "<b>Story count is usually free and instant:</b> the <b>pre-fire sale listing</b> "
+        "describes the house floor by floor. Burned lots nearly always have one sitting "
+        "in the MLS archive — search the address on Redfin/Zillow/Compass and read the "
+        "old copy. 16767 Bollinger's 2024 listing says it outright: <i>\"The main level "
+        "offers a formal living room... The second level offers a spacious primary "
+        "suite.\"</i> Two storeys, no form, no wait.",
+        "",
+        "<b>Footprint itself needs the record (verified 17 Jul 2026):</b>",
+        "&bull; <b>LADBS Atlas</b> — permit and Certificate of Occupancy records by "
+        "address. Free, no owner permission. Start here.",
         "&bull; <b>LADBS 'Generate Rebuild Letter'</b> — a service built for exactly this "
         "question. Free, online.",
         "&bull; <b>Records Research Request</b> (records.ladbs@lacity.org, 5-7 working "
@@ -195,8 +260,7 @@ def la_review_note(prior_sqft: Optional[int], year_built: Optional[int]) -> str:
         "<span class='cite'>NOTE: actual blueprints require an original release letter "
         "from the CURRENT owner plus their Grant Deed (Cal. Health &amp; Safety Code "
         "19851) — not obtainable on a lot you don't own. And LADBS holds no plans for "
-        "single-family dwellings prior to 1978. Atlas, the Rebuild Letter, and the "
-        "Certificate of Occupancy are the routes that work pre-acquisition.</span>",
+        "single-family dwellings prior to 1978.</span>",
     ]
     if year_built and year_built >= 1978:
         lines.append(

@@ -46,6 +46,10 @@ OUT_FIELDS = ",".join([
     "DesignType3", "YearBuilt3", "Units3", "SQFTmain3",
     "Roll_Year", "Roll_LandValue", "Roll_ImpValue",
     "CENTER_LAT", "CENTER_LON",
+    # Lot size from the parcel polygon rather than a listing claim. The docstring
+    # promised this and never fetched it. If the layer rejects the name the query
+    # still succeeds — see _to_parcel, which treats it as optional.
+    "Shape.STArea()",
 ])
 
 # LA County use codes — the ones that matter for this regime.
@@ -71,6 +75,7 @@ class Parcel:
     baths: Optional[int] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+    lot_sqft: Optional[int] = None        # from the parcel polygon, not a listing claim
     n_structures: int = 0
     land_value: Optional[int] = None
     imp_value: Optional[int] = None
@@ -183,6 +188,22 @@ def lookup(address: str, city: Optional[str] = None, timeout: int = 20,
                              f"<br><span class='cite'>query: {where}</span>")
 
 
+def _lot_area(a: dict) -> Optional[int]:
+    """
+    Lot size from the parcel polygon. The layer may expose this under a few names
+    depending on how the service was published, so try them all and treat absence
+    as data rather than error.
+    """
+    for k in ("Shape.STArea()", "Shape_Area", "Shape.area", "SHAPE.STArea()"):
+        v = a.get(k)
+        if v:
+            try:
+                return int(float(v))
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
 def _to_parcel(a: dict) -> Parcel:
     sqfts, years, units, designs = [], [], [], []
     for i in (1, 2, 3):
@@ -215,6 +236,7 @@ def _to_parcel(a: dict) -> Parcel:
         baths=a.get("Bathrooms1"),
         lat=a.get("CENTER_LAT"),
         lon=a.get("CENTER_LON"),
+        lot_sqft=_lot_area(a),
         n_structures=len(sqfts),
         land_value=a.get("Roll_LandValue"),
         imp_value=a.get("Roll_ImpValue"),
@@ -275,7 +297,7 @@ def _discrepancy(p: Parcel, listing_sqft) -> Optional[str]:
     return msg
 
 
-def triage(p: Parcel, listing_sqft=None, listing_price=None) -> Triage:
+def triage(p: Parcel, listing_sqft=None, listing_price=None, storeys=None) -> Triage:
     """
     Eligibility screen. Routes by jurisdiction FIRST, then applies that
     jurisdiction's rule — never a default one.
@@ -300,7 +322,7 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None) -> Triage:
         # published by the Assessor. Name the rule, name the gap, refuse the number.
         # The discrepancy check runs FIRST and runs everywhere — it is the most
         # valuable output the tool has and it is not Malibu-specific.
-        note = jur.la_review_note(p.prior_sqft, p.year_built)
+        note = jur.la_review_note(p.prior_sqft, p.year_built, storeys)
         d = _discrepancy(p, listing_sqft)
         if d:
             note = f"{d}<br><br>{note}"
@@ -348,14 +370,108 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None) -> Triage:
 
 
 # ---------------------------------------------------------------- envelope
-def ceiling_from_year(yr: Optional[int]):
+def ceiling_from_year(yr: Optional[int], override: Optional[float] = None):
+    """
+    Prior ceiling height. THE SOFTEST LOAD-BEARING NUMBER IN THIS TOOL.
+
+    ---------------------------------------------------------------------------
+    READ THIS BEFORE TRUSTING ANY MALIBU ENVELOPE THIS TOOL PRINTS
+    ---------------------------------------------------------------------------
+    The year->height mapping below is NOT SOURCED. It was chosen for plausibility,
+    not derived from a construction-history reference, a survey, or the county
+    record. The county does not publish ceiling height at all.
+
+    It drives the volume ceiling, which is the tool's headline finding. On 20838
+    PCH, correcting this one input moved the envelope 19%. Every Malibu number
+    downstream of it inherits its uncertainty.
+
+    It is kept because the alternative — refusing to compute any Malibu envelope
+    at all — is less useful than computing one and labelling it honestly. But it
+    is a bracket, not a measurement.
+
+    HOW TO KILL THIS ASSUMPTION, in order of cost:
+      1. The pre-fire sale listing. Luxury copy brags about ceiling height
+         ("soaring 12-foot ceilings", "volume ceilings"). Free, instant, and the
+         same trick that gives you storey count on the LA branch.
+      2. Tal's own knowledge of the block. He walked David's house. Use `override`.
+      3. Original plans or the survey required at Planning Verification
+         [Issue No. 12]. Definitive, slow.
+
+    Returns (height_ft, basis_string). The basis string travels with the output so
+    a reader always sees where the number came from.
+    """
+    if override:
+        return float(override), f"SUPPLIED — {override}ft, entered by you, not estimated"
     if not yr:
-        return None, "UNKNOWN — no year built"
+        return None, "UNKNOWN — no year built, envelope not computed"
     if yr < 1950:
-        return 8.0, f"ESTIMATED from year built {yr} (pre-1950 ~8ft)"
+        return 8.0, (f"ESTIMATED — UNSOURCED. Year built {yr}; assumed ~8ft for pre-1950 "
+                     f"stock. Not from any record. Check the pre-fire listing.")
     if yr < 2000:
-        return 8.5, f"ESTIMATED from year built {yr} (mid-century ~8.5ft)"
-    return 9.5, f"ESTIMATED from year built {yr} (modern ~9.5ft)"
+        return 8.5, (f"ESTIMATED — UNSOURCED. Year built {yr}; assumed ~8.5ft for "
+                     f"mid-century stock. Not from any record. Check the pre-fire listing.")
+    return 9.5, (f"ESTIMATED — UNSOURCED. Year built {yr}; assumed ~9.5ft for modern "
+                 f"stock. Not from any record. Check the pre-fire listing.")
+
+
+def ceiling_sensitivity(prior_sqft: float, proposed_ceiling: float,
+                        basement_sqft: float = 0.0):
+    """
+    What the Malibu envelope would be across the plausible range of prior ceiling
+    heights. Since prior_ceiling is unsourced, a point estimate conveys false
+    precision — this shows the reader how much the guess is carrying.
+    """
+    out = []
+    for h in (8.0, 8.5, 9.0, 9.5, 10.0):
+        e = envelope(prior_sqft, h, proposed_ceiling, basement_sqft)
+        out.append(dict(prior_ceiling=h, gross=e["gross"], binding=e["binding"],
+                        delta=e["haircut_vs_prior"]))
+    return out
+
+
+def spr_check(is_beachfront: Optional[bool], proposed_ceiling: float,
+              storeys_proposed: int = 1) -> Optional[str]:
+    """
+    Interpretation No. 24, Issue No. 9 — THE +10% IS NOT ALWAYS MINISTERIAL.
+
+    The 10% increases must comply with current zoning. On NON-BEACHFRONT properties,
+    an increase to height or bulk above 18 feet requires SITE PLAN REVIEW
+    (MMC 17.62.040). Increases into required setbacks likewise require SPR, with de
+    minimis encroachments possible at Director / Planning Manager discretion.
+
+    WHY THIS MATTERS MORE THAN IT LOOKS
+    Five of the seven PCH lots in the current set are Las Flores — non-beachfront.
+    So on the majority of the set the "express" +10% is a DISCRETIONARY approval
+    carrying timeline and denial risk, not an automatic one.
+
+    It also compounds with the ceiling-height election: raising ceilings is exactly
+    what drives height above 18ft. The move that shrinks the envelope via the volume
+    cap is the same move that triggers SPR. The two constraints bite together.
+
+    Beachfront status is NOT in the county record. It has to be supplied — it is
+    determinable per parcel from the City's GIS layers.
+    """
+    if is_beachfront is None:
+        return ("<b>SPR STATUS UNKNOWN.</b> Beachfront or not? Not in the county record. "
+                "If this lot is NON-beachfront, any increase to height or bulk above 18ft "
+                "requires Site Plan Review [Issue No. 9] — meaning the +10% is "
+                "discretionary, not ministerial, with timeline and denial risk. "
+                "Determinable per parcel from the City's GIS appeal-zone / beachfront "
+                "layers. Five of the seven current PCH lots are Las Flores, non-beachfront.")
+    if is_beachfront:
+        return None
+    est_height = proposed_ceiling * storeys_proposed
+    if est_height > 18:
+        return (f"<b>SITE PLAN REVIEW REQUIRED [Issue No. 9].</b> Non-beachfront, and "
+                f"{storeys_proposed} storey(s) at {proposed_ceiling}ft is ~{est_height:.0f}ft "
+                f"— above the 18ft threshold (MMC 17.62.040). <b>The +10% here is a "
+                f"discretionary approval, not ministerial.</b> Carries timeline and denial "
+                f"risk that the express-lane framing does not. Note this compounds with the "
+                f"ceiling election: raising ceilings shrinks the envelope via the volume cap "
+                f"AND triggers SPR.")
+    return (f"<span class='cite'>Non-beachfront, ~{est_height:.0f}ft proposed — under the "
+            f"18ft SPR threshold [Issue No. 9]. Setback encroachments would still "
+            f"trigger review.</span>")
 
 
 def envelope(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,

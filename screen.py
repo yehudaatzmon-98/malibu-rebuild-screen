@@ -15,7 +15,8 @@ import re
 import pandas as pd
 import streamlit as st
 
-from county import lookup, triage, envelope, ceiling_from_year, split_address
+from county import (lookup, triage, envelope, ceiling_from_year, split_address,
+                    ceiling_sensitivity, spr_check)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -107,22 +108,50 @@ height only — so it doesn't. A parcel is never screened under a rule it isn't 
 with st.expander("What you'd build  —  these are your calls, not the model's", expanded=False):
     st.markdown('<span class="cite">The rule is fixed. These are not. Every figure below '
                 'is yours and travels with the output.</span>', unsafe_allow_html=True)
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
         proposed_ceiling = st.number_input(
             "Ceiling height you'd build (ft)", 8.0, 14.0, 10.0, 0.5,
-            help="This is the single biggest lever in the rule. A 1963 beach house has "
+            help="The single biggest lever in the Malibu rule. A 1963 beach house has "
                  "~8.5ft ceilings. Build to 10ft and the volume cap bites — you get LESS "
-                 "square footage than burned. Build to 8.5ft and you get the full +10%.")
-        st.markdown('<span class="assumed">Currently your input · drives the volume ceiling</span>',
+                 "square footage than burned. Build to 8.5ft and you get the full +10%. "
+                 "Has NO effect on City of LA lots, where EO1 doesn't cap volume.")
+        st.markdown('<span class="assumed">Your input · drives the volume ceiling</span>',
                     unsafe_allow_html=True)
     with c2:
         basement = st.number_input(
-            "Basement / subterranean garage you'd build (sf)", 0, 5000, 0, 100,
+            "Basement / subterranean garage (sf)", 0, 5000, 0, 100,
             help="Counts toward the same 110% (Issue No. 5) and returns nothing per "
                  "finished sf. Every foot here comes out of habitable area.")
         st.markdown('<span class="assumed">Envelope tax · Issue No. 5</span>',
                     unsafe_allow_html=True)
+    with c3:
+        prior_override = st.number_input(
+            "Prior ceiling height, if you know it (ft)", 0.0, 14.0, 0.0, 0.5,
+            help="LEAVE 0 AND THE TOOL GUESSES. The year->height mapping is UNSOURCED — "
+                 "it is the softest load-bearing number here and it drives the whole "
+                 "volume finding. On a 989sf lot the envelope swings 870->1,088 sf across "
+                 "the plausible range. Kill the guess: the pre-fire sale listing usually "
+                 "brags about ceiling height, or use what you know from the block.")
+        st.markdown('<span class="assumed">Overrides the unsourced estimate</span>',
+                    unsafe_allow_html=True)
+
+    st.markdown("")
+    c4, c5 = st.columns(2)
+    with c4:
+        bf = st.selectbox(
+            "Beachfront? (Malibu only — Issue No. 9)",
+            ["Unknown", "Beachfront", "Non-beachfront"],
+            help="NOT in the county record. On NON-beachfront Malibu lots, any increase "
+                 "above 18ft needs Site Plan Review — so the +10% is DISCRETIONARY, not "
+                 "ministerial. Five of the seven PCH lots are Las Flores, non-beachfront. "
+                 "Determinable per parcel from the City's GIS layers.")
+        beachfront = {"Unknown": None, "Beachfront": True, "Non-beachfront": False}[bf]
+    with c5:
+        storeys_build = st.number_input(
+            "Storeys you'd build", 1, 4, 1, 1,
+            help="Drives the SPR height check on Malibu non-beachfront lots "
+                 "(ceiling x storeys vs the 18ft threshold).")
 
 st.markdown("---")
 
@@ -130,16 +159,25 @@ st.markdown("---")
 tab_batch, tab_one = st.tabs(["Screen a Redfin export", "Check one address"])
 
 with tab_one:
-    ca1, ca2 = st.columns([3, 1])
+    ca1, ca2, ca3 = st.columns([3, 1, 1])
     with ca1:
         a = st.text_input("Address", placeholder="20610 Pacific Coast Hwy")
     with ca2:
         claimed = st.number_input(
-            "Prior sf the listing claims (optional)", 0, 50000, 0, 50,
-            help="Paste what the listing says burned. Live examples: 20048 PCH claimed "
-                 "2,452 against a county record of 1,671 (+47%). 16767 Bollinger claimed "
-                 "4,527 against 3,339 (+36%). Prior sqft sets the rebuild envelope in "
-                 "both regimes and it is the number nobody checks.")
+            "Prior sf the listing claims", 0, 50000, 0, 50,
+            help="Paste what the listing says burned. Live: 20048 PCH claimed 2,452 "
+                 "against a county record of 1,671 (+47%). 16767 Bollinger claimed 4,527 "
+                 "against 3,339 (+36%). Prior sqft sets the rebuild envelope in both "
+                 "regimes and it is the number nobody checks.")
+    with ca3:
+        storeys_in = st.number_input(
+            "Storeys (City of LA only)", 0, 4, 0, 1,
+            help="Read it off the PRE-FIRE sale listing — burned lots nearly always have "
+                 "one in the MLS archive, and it describes the house floor by floor. "
+                 "Bollinger's 2024 listing: 'The main level offers... The second level "
+                 "offers a spacious primary suite.' Two storeys, free, instant. Only used "
+                 "on City of LA parcels, where EO1 caps footprint rather than sqft. "
+                 "Leave 0 if unknown.")
     if st.button("Check it") and a:
         with st.spinner("Pulling the county record…"):
             p = lookup(a)
@@ -147,7 +185,7 @@ with tab_one:
             st.markdown(f'{stamp("UNSCOREABLE")}', unsafe_allow_html=True)
             st.markdown(f'<div class="card mono">{p.note}</div>', unsafe_allow_html=True)
         else:
-            t = triage(p, listing_sqft=claimed or None)
+            t = triage(p, listing_sqft=claimed or None, storeys=storeys_in or None)
             j = jur.route(p.situs_city)
             st.markdown(f'{stamp(t.verdict)}  <span class="cite">{j.name}'
                         f'{" · " + t.rule if t.rule else ""}</span>',
@@ -158,7 +196,10 @@ with tab_one:
             st.markdown(f'<div class="card">{t.reason}</div>', unsafe_allow_html=True)
             # Envelope math is Interp. No. 24 — Malibu only. Never run it elsewhere.
             if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
-                ph, basis = ceiling_from_year(p.year_built)
+                spr = spr_check(beachfront, proposed_ceiling, storeys_build)
+                if spr:
+                    st.markdown(f'<div class="card">{spr}</div>', unsafe_allow_html=True)
+                ph, basis = ceiling_from_year(p.year_built, prior_override or None)
                 if ph:
                     e = envelope(p.prior_sqft, ph, proposed_ceiling, basement)
                     k1, k2, k3 = st.columns(3)
@@ -180,8 +221,29 @@ with tab_one:
                     sqft ceiling &nbsp; {p.prior_sqft:,} × 1.10 = <b>{e['sqft_cap']:,}</b><br>
                     volume ceiling &nbsp; ({p.prior_sqft:,} × {ph}ft × 1.10) ÷ {proposed_ceiling}ft = <b>{e['vol_cap']:,}</b><br>
                     <span class="binding">→ {e['binding']} binds at {e['gross']:,} sf</span><br>
-                    <span class="cite">prior ceiling {basis}</span>
+                    <span class="cite">prior ceiling: {basis}</span>
                     </div>""", unsafe_allow_html=True)
+
+                    if not prior_override:
+                        rows_s = ceiling_sensitivity(p.prior_sqft, proposed_ceiling, basement)
+                        body = "".join(
+                            f"<tr><td style='padding:2px 14px 2px 0'>{r['prior_ceiling']}ft</td>"
+                            f"<td style='padding:2px 14px 2px 0'><b>{r['gross']:,}</b> sf</td>"
+                            f"<td style='padding:2px 14px 2px 0'>{r['delta']:+.0%}</td>"
+                            f"<td style='padding:2px 0'>{r['binding']}</td></tr>"
+                            for r in rows_s)
+                        lo = min(r["gross"] for r in rows_s)
+                        hi = max(r["gross"] for r in rows_s)
+                        st.markdown(f"""<div class="card mono" style="font-size:0.75rem">
+                        <b>HOW MUCH IS THE GUESS CARRYING?</b><br>
+                        <span class="cite">The prior ceiling above is UNSOURCED. Across the
+                        plausible range this lot's envelope spans <b>{lo:,}–{hi:,} sf</b>
+                        ({(hi/lo - 1):.0%} swing). That is the tool's headline number moving on
+                        an assumption nobody sourced.</span><br><br>
+                        <table>{body}</table><br>
+                        <span class="cite">Kill it: the pre-fire sale listing usually states
+                        ceiling height. Enter it above and this table disappears.</span>
+                        </div>""", unsafe_allow_html=True)
 
 with tab_batch:
     up = st.file_uploader("Redfin CSV", type=["csv"], label_visibility="collapsed")
@@ -209,10 +271,12 @@ with tab_batch:
                 city = None
             p = lookup(addr, city)
             listing_sqft = r.get("SQUARE FEET")
+            # Redfin exports don't carry storey count. LA rows stay REVIEW without an
+            # indicative bracket — check the pre-fire listing per address in the other tab.
             t = triage(p, listing_sqft=listing_sqft)
             env = None
             if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
-                ph, _ = ceiling_from_year(p.year_built)
+                ph, _ = ceiling_from_year(p.year_built, prior_override or None)
                 if ph:
                     env = envelope(p.prior_sqft, ph, proposed_ceiling, basement)
             rows.append(dict(
@@ -220,6 +284,7 @@ with tab_batch:
                 Verdict=t.verdict,
                 Jurisdiction=jur.route(p.situs_city).name if p.found else "—",
                 Prior_sf=p.prior_sqft,
+                Lot_sf=p.lot_sqft,
                 Built=p.year_built,
                 Units=p.units,
                 Buildable_sf=env["habitable"] if env else None,
@@ -281,10 +346,21 @@ square footage. A new story is permitted within those caps. EO8 lets zoning-comp
 non-like-for-like single-family projects bypass local Coastal Act and CEQA review. LA
 parcels return REVIEW, not an envelope: EO1 needs prior FOOTPRINT and the Assessor
 publishes gross sqft. The rule is known; the input isn't. We don't guess it.<br>
-<b>NOT MODELLED:</b> Issue No. 9 (non-beachfront +10% above 18ft needs Site Plan Review —
-five of the seven PCH lots are non-beachfront, so the +10% is discretionary there, not
-ministerial). Issue No. 7's ≤10ft-apart test. The 110% height cap itself.<br>
-County data is SOURCED. <b>Ceiling height is ESTIMATED from year built and is unsourced —
-it is the softest load-bearing number in this tool</b> and it drives the volume ceiling.
-What you'd build is yours.
+<b>STILL NOT MODELLED — read this before trusting a number:</b><br>
+&bull; <b>The 110% HEIGHT cap.</b> Interp. No. 24 caps height as well as bulk and sqft. Only
+bulk and sqft are computed. A design can pass this tool and fail on height.<br>
+&bull; <b>Issue No. 7's ≤10ft-apart test.</b> Multiple structures are summed and flagged, but
+the combining rule isn't applied.<br>
+&bull; <b>EO1 envelopes.</b> LA lots return REVIEW with an indicative bracket at best —
+footprint isn't in the county record.<br>
+&bull; <b>Setback / FAR / zoning compliance</b> in either jurisdiction. Issue No. 9 requires the
++10% to comply with current zoning; the tool checks the 18ft height trigger only.<br>
+&bull; <b>Everything after entitlement:</b> cost, carry, comps, exit, insurance, coastal
+engineering, debris, septic, seawall. This is a screen, not underwriting.<br><br>
+<b>PROVENANCE.</b> County parcel data is SOURCED (LA County Assessor, live). Prior ceiling
+height is <b>ESTIMATED AND UNSOURCED</b> unless you override it — the year→height mapping was
+chosen for plausibility, not derived from any record, and it drives the volume ceiling that
+is this tool's headline finding. On a 989sf lot the envelope swings 870–1,088 sf across the
+plausible range. The sensitivity table shows you how much the guess is carrying. Storey count
+on LA lots is ESTIMATED-FROM-LISTING. What you'd build is yours.
 </span>""", unsafe_allow_html=True)
