@@ -330,13 +330,8 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None, storeys=None) -> Tr
 
     # --- City of Malibu: Interpretation No. 24 ---
     if not p.prior_sqft:
-        return Triage(
-            "UNSCOREABLE",
-            "County shows no prior structure square footage. Like-for-like relief is "
-            "granted by reference to what burned — with no prior sqft there is no "
-            "envelope to compute. If the Assessor listed the parcel as vacant BEFORE "
-            "the fire, any structure on it is deemed illegal.",
-            "Interp. No. 24, Issue No. 4", jur.MALIBU)
+        return Triage("UNSCOREABLE", no_prior_sqft_note(p),
+                      "Interp. No. 24, Issue No. 4", jur.MALIBU)
 
     if p.units and p.units > 1:
         return Triage(
@@ -494,6 +489,162 @@ def purchaser_diligence(p: Parcel) -> list:
             "envelopes, not one merged one.")
 
     return flags
+
+
+def vacancy_diagnostic(p: Parcel) -> str:
+    """
+    THE DIAGNOSTIC IS IMPROVEMENT VALUE, NOT SQUARE FOOTAGE.
+
+    We already pull Roll_ImpValue. It was sitting unused while the tool drew
+    conclusions from a null square-footage field. Improvement value on the roll
+    means the Assessor taxed a building. A null sf field alongside it is a records
+    gap. Land value with zero improvement across years is the real signal.
+    """
+    iv = p.imp_value
+    lv = p.land_value
+    if iv is None and lv is None:
+        return ("<span class='cite'>Roll values not returned — can't run the improvement-value "
+                "diagnostic. Pull the tax roll history directly.</span>")
+    if iv and iv > 0:
+        return (f"<b>Improvement value on the roll: ${iv:,}.</b> The Assessor was taxing a "
+                f"building. A null square-footage field alongside a live improvement value is "
+                f"a <b>records gap</b>, not a vacancy — the structure existed and the "
+                f"measurement is missing. This is the recoverable case. Run the archaeology.")
+    if lv and (iv == 0 or iv is None):
+        return (f"<b>Land value ${lv:,}, improvement value ${iv if iv is not None else 0:,}.</b> "
+                f"Land-only with zero improvement is <b>the real signal</b> — but check it "
+                f"across multiple roll years before concluding, and check it against CAL FIRE "
+                f"DINS, which recorded what physically stood on 7 Jan. If genuinely vacant, "
+                f"there is no baseline: no like-for-like, no +10%, no CDP exemption. Raw land, "
+                f"full CDP. <b>Reprice or walk.</b>")
+    return "<span class='cite'>Roll values inconclusive. Pull the tax roll history directly.</span>"
+
+
+def no_prior_sqft_note(p: Parcel) -> str:
+    """
+    Issue No. 4 — WHAT AN EMPTY SQUARE-FOOTAGE FIELD ACTUALLY MEANS.
+
+    An earlier version of this tool said: "If the Assessor listed the parcel as
+    vacant BEFORE the fire, any structure on it is deemed illegal." That was wrong
+    twice over and it pointed at the wrong risk.
+
+    WRONG #1 — an empty field is not a vacancy finding. Absence of data is not an
+    affirmative characterisation. A parcel can carry improvement value, a
+    homeowner's exemption and decades of assessment history while the sf field is
+    null: data migration, a base-year record predating digitisation, an improvement
+    never re-measured. THE DIAGNOSTIC IS IMPROVEMENT VALUE, NOT SQUARE FOOTAGE.
+    Land value + improvement value with a null sf field is a records gap. Land only,
+    zero improvement across multiple years, is a real signal. Those two findings
+    should drive completely different decisions.
+
+    WRONG #2 — Issue No. 4 governs whether a structure that EXISTED was LAWFULLY
+    ERECTED. If a lot was genuinely vacant, Issue No. 4 never engages, because there
+    is no structure to characterise. And that outcome is MUCH WORSE than "deemed
+    illegal," not better. An illegal structure is something you can argue about —
+    bring aerials, CCC files, the Palisades relaxation. A vacant lot leaves no
+    baseline, no like-for-like, no +10%, no CDP exemption. It is raw land requiring
+    a full CDP for new development — which on beachfront drops you into the
+    hazard / SLR / stringline / access-dedication analysis on a lot bought precisely
+    for rebuild rights you don't have.
+
+    The Assessor is ONE item on a non-exhaustive list. Issue No. 4: "Evidence that
+    may be used to demonstrate the above includes, BUT IS NOT LIMITED TO, aerial and
+    GIS imagery, photography, city records, Los Angeles County Assessor data, and
+    California Coastal Commission records." An empty Assessor record is the failure
+    of one of five named evidence types. It is not a determination.
+    """
+    return (
+        "<b>No prior square footage in the Assessor record. That is a blank cell, not a "
+        "finding.</b><br><br>"
+        + vacancy_diagnostic(p) + "<br><br>"
+        "Three different worlds, and the tool cannot tell them apart:<br>"
+        "&bull; <b>Records gap, structure existed</b> — most likely. Recoverable through "
+        "archaeology.<br>"
+        "&bull; <b>Structure existed but wholly unpermitted</b> — Issue No. 4 engages, and "
+        "for Palisades the test is generous (below).<br>"
+        "&bull; <b>Genuinely vacant</b> — no baseline, no like-for-like, no +10%, no CDP "
+        "exemption. Raw land needing a full CDP. <b>This is the bad one</b>, and on "
+        "beachfront it means buying into the hazard/SLR/stringline/access analysis on a lot "
+        "priced for rebuild rights you don't have.<br><br>"
+        "<b>The diagnostic is IMPROVEMENT VALUE, not square footage.</b> Pull the tax roll "
+        "history. Land value <i>and</i> improvement value with a null sf field is a records "
+        "gap. Land only, zero improvement across multiple years, is a real signal.<br><br>"
+        "<b>Where to look — the Assessor is the WORST of the available sources:</b><br>"
+        "&bull; <b>CAL FIRE DINS</b> ('DINS 2025 Palisades Public View') — state-agency, "
+        "contemporaneous, parcel-level record of what physically stood on 7 Jan, with APN "
+        "appended and photos often available. Free. Presence is proof of presence; absence "
+        "isn't proof of absence.<br>"
+        "&bull; <b>Debris removal records</b> — if something was hauled, someone measured and "
+        "logged it.<br>"
+        "&bull; <b>Coastal Commission files</b> — named in Issue No. 4. Any post-1976 CDP is "
+        "in Ventura district files, and CDP applications carry dimensioned plans.<br>"
+        "&bull; <b>LA County permits, pre-1991.</b> Malibu incorporated in 1991. An older "
+        "house's permit was never Malibu's to lose — it's the County's. Searching only "
+        "MalibuCity.org means searching the wrong archive.<br>"
+        "&bull; <b>Historical aerials</b> (UCSB's California coast collection goes back to "
+        "the 1920s) — this is how you prove pre-1976 existence on a beachfront parcel.<br>"
+        "&bull; <b>MLS history</b> — if it ever traded, the listing carried a square footage, "
+        "often predating the Assessor's digital record.<br>"
+        "&bull; <b>The seller's insurance file</b> — the carrier ran a replacement-cost "
+        "estimate with square footage, and there's a post-fire claim file. Sellers hand these "
+        "over without thinking about what they're worth to you.<br><br>"
+        "<b>If the structure was unpermitted, the Palisades relaxation does heavy lifting.</b> "
+        "For 2025 Palisades Fire structures only, 'lawfully erected' also includes any "
+        "structure that physically existed immediately prior to the fire, provided it wasn't "
+        "subject to an open code enforcement violation, didn't violate a law beyond the City's "
+        "power to waive, and <i>\"has a building permit that allows the structure to exist in "
+        "some form\"</i> — with the gloss that an unpermitted remodel or addition "
+        "<i>\"would not disqualify the whole structure.\"</i> You need <i>a</i> permit letting "
+        "it exist in <i>some</i> form. Not one matching what burned. That is a low bar, and it "
+        "forgives the unpermitted-addition problem across 1950s-70s Malibu stock.<br><br>"
+        "<b>Resolve beachfront status first — it moves the evidentiary target by 15 years.</b> "
+        "The general test accepts evidence of existence prior to City incorporation (1991), "
+        "<i>\"except structures located on a beach, coastal bluff, within an environmentally "
+        "sensitive habitat area, or other sensitive coastal resource area must be shown to "
+        "have existed prior to the California Coastal Act\"</i> (1976).<br><br>"
+        "<span class='cite'><b>Don't score it. Structure it.</b> Make the bid contingent on "
+        "establishing a baseline — a price adjustment or a short option while you run DINS, "
+        "debris records, County permits and aerials. Days and low four figures, not weeks. The "
+        "cost of being wrong is buying raw beachfront at rebuild-rights pricing, and there is "
+        "no version of that you fix later.<br><br>"
+        "This is the only lot in the set where you <b>know</b> you don't know — which makes it "
+        "the only one you're priced correctly for. On the others you may be assuming a "
+        "baseline you haven't verified either.</span>")
+
+
+def baseline_provenance_warning(p: Parcel) -> str:
+    """
+    The line this tool most needed to hear: "the other six, you may be assuming a
+    baseline you haven't verified either."
+
+    The tool tags SQFTmain as SOURCED. That is true about where the number came
+    from and misleading about what it establishes. The Assessor is a taxation body.
+    It doesn't adjudicate permits, and Issue No. 4 lists it as one of five
+    non-exhaustive evidence types. Issue No. 12 requires a SURVEY at Planning
+    Verification precisely because the Assessor and the plans disagree.
+
+    So: SOURCED, yes. VERIFIED BASELINE, no. Those are different claims and the tool
+    should not blur them.
+    """
+    return (
+        "<b>This baseline is Assessor data. That is a source, not a verified envelope.</b><br>"
+        "The Assessor is a taxation body — it doesn't adjudicate permits, and Issue No. 4 "
+        "names it as one of five non-exhaustive evidence types. Issue No. 12 hard-requires a "
+        "<b>survey at Planning Verification</b> precisely because the Assessor and the plans "
+        "disagree. Every envelope below inherits whatever error is in this one number.<br><br>"
+        "<b>Two known ways it's wrong, both in your favour if you check:</b><br>"
+        "&bull; <b>Basements.</b> Assessor square-footage conventions frequently exclude or "
+        "inconsistently capture below-grade area. If a prior basement isn't in this figure, "
+        "your baseline is <b>understated</b> — and prior basement volume sits in the envelope "
+        "for free, multiplies by 1.10, and gets the first 1,000 sf discounted from TDSF under "
+        "MMC 17.40.040(A)(13)(c), a discount Issue No. 5 confirms doesn't reach the 110%. "
+        "<i>Verify the LA County convention rather than taking this on faith.</i><br>"
+        "&bull; <b>A new basement is the worst possible use of the 10%</b> — it eats the whole "
+        "allowance in bulk and returns zero height [Issues No. 1 and No. 5]. A <i>prior</i> "
+        "basement is worth real money. Check the permit record.<br><br>"
+        "<span class='cite'>The same archaeology that resolves an unscoreable lot resolves the "
+        "basement question across the whole set. One workstream, not two, with upside on both "
+        "ends.</span>")
 
 
 def tdsf_cap(lot_sqft: Optional[float], is_beachfront: Optional[bool]) -> Optional[dict]:

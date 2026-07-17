@@ -18,7 +18,7 @@ import streamlit as st
 from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_year,
                     split_address, ceiling_sensitivity, spr_check, purchaser_diligence,
                     realistic_program, access_dedication_warning, height_conformity_flag,
-                    pf1_check, tdsf_cap, beachfront_fork)
+                    pf1_check, tdsf_cap, beachfront_fork, baseline_provenance_warning)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -323,6 +323,9 @@ with tab_one:
             st.markdown(f'<div class="card">{t.reason}</div>', unsafe_allow_html=True)
             # Envelope math is Interp. No. 24 — Malibu only. Never run it elsewhere.
             if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
+                st.markdown(f'<div class="card card-warn">'
+                            f'{baseline_provenance_warning(p)}</div>',
+                            unsafe_allow_html=True)
                 st.markdown(f'<div class="card card-note">{beachfront_fork(beachfront)}</div>',
                             unsafe_allow_html=True)
                 cliff = access_dedication_warning(beachfront, over_cap)
@@ -345,7 +348,7 @@ with tab_one:
                     with k1:
                         st.markdown(f'<div class="figure-label">what burned</div>'
                                     f'<div class="figure">{p.prior_sqft:,}</div>'
-                                    f'<span class="sourced">SOURCED · county</span>',
+                                    f'<span class="assumed">ASSESSOR · NOT A SURVEY</span>',
                                     unsafe_allow_html=True)
                     with k2:
                         st.markdown(f'<div class="figure-label">as of right</div>'
@@ -595,7 +598,7 @@ names the gap instead of guessing across it.
 
 | | |
 |---|---|
-| **Parcel record** | SOURCED — LA County Assessor, live |
+| **Parcel record** | LA County Assessor, live — a *source*, not a verified envelope |
 | **Prior ceiling height** | **ESTIMATED, UNSOURCED** unless you override it |
 | **Storey count (LA)** | ESTIMATED from the pre-fire listing |
 | **What you'd build** | Yours |
@@ -605,6 +608,13 @@ drives the volume ceiling, which is this tool's headline finding. On a 989 sf lo
 envelope swings between 870 and 1,088 sf across the plausible range. The sensitivity table
 shows how much that guess is carrying. The pre-fire sale listing usually states ceiling
 height; enter it and the guess goes away.
+
+**And the baseline itself isn't a survey.** The Assessor is a taxation body — it doesn't
+adjudicate permits, and Issue No. 4 lists it as one of five non-exhaustive evidence types.
+Issue No. 12 hard-requires a survey at Planning Verification *precisely because* the Assessor
+and the plans disagree. Every envelope here inherits whatever error is in that one number.
+An empty square-footage field is a blank cell, not a vacancy finding — the diagnostic is
+improvement value on the roll, not the sf field.
 """)
     st.markdown("---")
     st.markdown("""
