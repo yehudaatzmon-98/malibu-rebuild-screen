@@ -54,6 +54,7 @@ UNKNOWN JURISDICTIONS FAIL LOUD
 """
 
 from __future__ import annotations
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -62,15 +63,33 @@ CITY_OF_LA = "CITY_OF_LA"
 UNKNOWN = "UNKNOWN"
 
 # SitusCity values as the Assessor stores them.
-# Pacific Palisades is a neighbourhood of the City of LA. The roll may carry it
-# either as its own situs city or folded into LOS ANGELES — both route to the
-# same rulebook, which is why we match on a set rather than a single string.
-_MALIBU_SITUS = {"MALIBU"}
-_LA_SITUS = {
+#
+# VERIFIED FROM LIVE DATA (17 Jul 2026): the roll appends the state — Palisades
+# parcels return "LOS ANGELES CA", not "LOS ANGELES". Exact matching missed it and
+# the parcel correctly fell through to UNKNOWN rather than guessing a rulebook.
+# We now normalise the trailing state before matching. Prefix matching is used
+# rather than equality because the roll's formatting is not contractual.
+#
+# Pacific Palisades is a neighbourhood of the City of LA, not a city. The roll may
+# carry it as its own situs city or folded into LOS ANGELES — both route to the
+# same rulebook.
+_MALIBU_SITUS = ("MALIBU",)
+_LA_SITUS = (
     "LOS ANGELES",
     "PACIFIC PALISADES",
-    "PACIFIC PALISADES AREA",
-}
+)
+
+
+def _clean_situs(s: str) -> str:
+    """
+    Strip the trailing state the Assessor appends: 'LOS ANGELES CA' -> 'LOS ANGELES'.
+    Also collapses whitespace and drops punctuation, since the roll is inconsistent.
+    """
+    s = str(s).upper().strip()
+    s = re.sub(r"[.,]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\s+(CA|CALIF|CALIFORNIA)$", "", s)
+    return s.strip()
 
 
 @dataclass
@@ -92,9 +111,9 @@ def route(situs_city: Optional[str]) -> Jurisdiction:
             note="County record carries no SitusCity. Jurisdiction undetermined, "
                  "so no rulebook applies. Not screened.")
 
-    s = str(situs_city).upper().strip()
+    s = _clean_situs(situs_city)
 
-    if s in _MALIBU_SITUS or s.startswith("MALIBU"):
+    if s.startswith(_MALIBU_SITUS):
         return Jurisdiction(
             MALIBU, "City of Malibu",
             "LCP & Zoning Code Interpretation No. 24 / Zoning Code No. 15, adopted 15 Oct 2025",
@@ -103,7 +122,7 @@ def route(situs_city: Optional[str]) -> Jurisdiction:
                  "prior structure — three simultaneous ceilings [Issue No. 1]. Raising "
                  "ceilings costs habitable area.")
 
-    if s in _LA_SITUS:
+    if s.startswith(_LA_SITUS):
         return Jurisdiction(
             CITY_OF_LA, "City of Los Angeles",
             "Mayoral Emergency Executive Order 1 (rev. 18 Mar 2025); EO8 (23 Jul 2025)",
@@ -118,9 +137,11 @@ def route(situs_city: Optional[str]) -> Jurisdiction:
     return Jurisdiction(
         UNKNOWN, f"{s.title()} (not modelled)", "",
         caps_gross_sqft=False, volume_binds=False,
-        note=f"SitusCity '{s}' is outside the two regimes this tool models (City of "
-             f"Malibu, City of Los Angeles). No rulebook applied. A parcel is never "
-             f"screened under a jurisdiction's rule it isn't subject to.")
+        note=f"SitusCity '{situs_city}' (normalised: '{s}') is outside the two regimes "
+             f"this tool models (City of Malibu, City of Los Angeles). No rulebook "
+             f"applied. A parcel is never screened under a jurisdiction's rule it isn't "
+             f"subject to. If this address IS in Malibu or the City of LA, the roll uses "
+             f"a spelling not yet in _MALIBU_SITUS / _LA_SITUS — add it there.")
 
 
 def la_review_note(prior_sqft: Optional[int], year_built: Optional[int]) -> str:
