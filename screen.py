@@ -130,7 +130,16 @@ st.markdown("---")
 tab_batch, tab_one = st.tabs(["Screen a Redfin export", "Check one address"])
 
 with tab_one:
-    a = st.text_input("Address", placeholder="20610 Pacific Coast Hwy")
+    ca1, ca2 = st.columns([3, 1])
+    with ca1:
+        a = st.text_input("Address", placeholder="20610 Pacific Coast Hwy")
+    with ca2:
+        claimed = st.number_input(
+            "Prior sf the listing claims (optional)", 0, 50000, 0, 50,
+            help="Paste what the listing says burned. Live examples: 20048 PCH claimed "
+                 "2,452 against a county record of 1,671 (+47%). 16767 Bollinger claimed "
+                 "4,527 against 3,339 (+36%). Prior sqft sets the rebuild envelope in "
+                 "both regimes and it is the number nobody checks.")
     if st.button("Check it") and a:
         with st.spinner("Pulling the county record…"):
             p = lookup(a)
@@ -138,7 +147,7 @@ with tab_one:
             st.markdown(f'{stamp("UNSCOREABLE")}', unsafe_allow_html=True)
             st.markdown(f'<div class="card mono">{p.note}</div>', unsafe_allow_html=True)
         else:
-            t = triage(p)
+            t = triage(p, listing_sqft=claimed or None)
             j = jur.route(p.situs_city)
             st.markdown(f'{stamp(t.verdict)}  <span class="cite">{j.name}'
                         f'{" · " + t.rule if t.rule else ""}</span>',

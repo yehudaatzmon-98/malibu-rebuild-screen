@@ -230,6 +230,51 @@ class Triage:
     jurisdiction: str = ""   # MALIBU | CITY_OF_LA | UNKNOWN
 
 
+def _discrepancy(p: Parcel, listing_sqft) -> Optional[str]:
+    """
+    Listing-vs-county prior square footage gap.
+
+    This is the single most reliably valuable check the tool performs, and it is
+    jurisdiction-independent — the county record is the county record regardless
+    of which rulebook governs the rebuild.
+
+    Observed, live, 17 Jul 2026:
+      20048 PCH (Malibu)      listing 2,452 sf vs county 1,671 sf  -> +47% overstated
+      16767 Bollinger (LA)    listing 4,527 sf vs county 3,339 sf  -> +36% overstated
+
+    Two lots, two markets, both listings inflating what burned. Prior square
+    footage is the input that sets the rebuild envelope in BOTH regimes, and it is
+    the number almost no buyer checks. A listing is a marketing document. The
+    county roll is a record. Model the record.
+    """
+    if not (listing_sqft and p.prior_sqft):
+        return None
+    try:
+        ls = float(listing_sqft)
+    except (TypeError, ValueError):
+        return None
+    if ls <= 0:
+        return None
+    gap = (ls - p.prior_sqft) / p.prior_sqft
+    if abs(gap) <= 0.10:
+        return None
+    direction = "OVERSTATES" if gap > 0 else "understates"
+    msg = (f"<b>DISCREPANCY — listing {direction} what burned.</b> Listing claims "
+           f"{ls:,.0f} sf; county roll shows {p.prior_sqft:,} sf ({gap:+.0%}).")
+    if gap > 0:
+        msg += (f" That is {ls - p.prior_sqft:,.0f} sf of envelope the listing is "
+                f"selling and the record does not support. Model the county figure.")
+    # The survey requirement is jurisdiction-specific — don't cite Malibu's
+    # interpretation at an LA parcel.
+    if jur.route(p.situs_city).code == jur.MALIBU:
+        msg += (" A survey is required at Planning Verification precisely because "
+                "Assessor and plans disagree [Interp. No. 24, Issue No. 12].")
+    else:
+        msg += (" Establish the prior envelope from issued permits, the Certificate of "
+                "Occupancy, or the LADBS Rebuild Letter before underwriting it.")
+    return msg
+
+
 def triage(p: Parcel, listing_sqft=None, listing_price=None) -> Triage:
     """
     Eligibility screen. Routes by jurisdiction FIRST, then applies that
@@ -253,9 +298,13 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None) -> Triage:
     if j.code == jur.CITY_OF_LA:
         # The rule is known and cited. The INPUT it needs (prior footprint) is not
         # published by the Assessor. Name the rule, name the gap, refuse the number.
-        return Triage("REVIEW",
-                      jur.la_review_note(p.prior_sqft, p.year_built),
-                      j.rulebook, j.code)
+        # The discrepancy check runs FIRST and runs everywhere — it is the most
+        # valuable output the tool has and it is not Malibu-specific.
+        note = jur.la_review_note(p.prior_sqft, p.year_built)
+        d = _discrepancy(p, listing_sqft)
+        if d:
+            note = f"{d}<br><br>{note}"
+        return Triage("REVIEW", note, j.rulebook, j.code)
 
     # --- City of Malibu: Interpretation No. 24 ---
     if not p.prior_sqft:
@@ -288,17 +337,9 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None) -> Triage:
             f"Combining is permitted only if they were <=10ft apart and the use is maintained; "
             f"uninhabitable sqft must stay uninhabitable [Issue No. 7].")
 
-    if listing_sqft and p.prior_sqft:
-        try:
-            ls = float(listing_sqft)
-            gap = abs(ls - p.prior_sqft) / p.prior_sqft
-            if gap > 0.10:
-                flags.append(
-                    f"DISCREPANCY: listing claims {ls:,.0f} sf vs county {p.prior_sqft:,} sf "
-                    f"({gap:.0%} gap). Model the county record. A survey is required at "
-                    f"Planning Verification precisely because of this [Issue No. 12].")
-        except (TypeError, ValueError):
-            pass
+    d = _discrepancy(p, listing_sqft)
+    if d:
+        flags.append(d)
 
     return Triage("ELIGIBLE",
                   " | ".join(flags) if flags else

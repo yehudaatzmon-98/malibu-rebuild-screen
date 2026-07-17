@@ -184,13 +184,28 @@ def la_review_note(prior_sqft: Optional[int], year_built: Optional[int]) -> str:
         "Per the EO1 guidelines these are established by issued building permits, the "
         "Certificate of Occupancy, County Assessor records, or Coastal Commission "
         "documents.",
+        "",
+        "<b>How to actually get them (verified 17 Jul 2026):</b>",
+        "&bull; <b>LADBS Atlas</b> — searches permit and Certificate of Occupancy records "
+        "by address. Free, no owner permission. Start here.",
+        "&bull; <b>LADBS 'Generate Rebuild Letter'</b> — a service built for exactly this "
+        "question. Free, online.",
+        "&bull; <b>Records Research Request</b> (records.ladbs@lacity.org, 5-7 working "
+        "days) for permit history.",
+        "<span class='cite'>NOTE: actual blueprints require an original release letter "
+        "from the CURRENT owner plus their Grant Deed (Cal. Health &amp; Safety Code "
+        "19851) — not obtainable on a lot you don't own. And LADBS holds no plans for "
+        "single-family dwellings prior to 1978. Atlas, the Rebuild Letter, and the "
+        "Certificate of Occupancy are the routes that work pre-acquisition.</span>",
     ]
-    if year_built and year_built >= 1977:
+    if year_built and year_built >= 1978:
         lines.append(
-            f"Built {year_built} — <b>LADBS holds as-built plans for anything after "
-            f"1977</b>, so the footprint is obtainable for this parcel.")
+            f"<span class='cite'>Built {year_built} — post-1978, so plans exist in the "
+            f"LADBS database even if you can't pull them without owner release. The "
+            f"C of O should carry the story count.</span>")
     elif year_built:
         lines.append(
-            f"Built {year_built} — predates 1977, so LADBS as-built plans may not exist. "
-            f"Try the Certificate of Occupancy or permit history.")
+            f"<span class='cite'>Built {year_built} — pre-1978, so LADBS holds no plans "
+            f"for it. The Certificate of Occupancy and permit history are the only "
+            f"routes.</span>")
     return "<br>".join(lines)
