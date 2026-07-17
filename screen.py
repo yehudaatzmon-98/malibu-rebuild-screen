@@ -18,7 +18,7 @@ import streamlit as st
 from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_year,
                     split_address, ceiling_sensitivity, spr_check, purchaser_diligence,
                     realistic_program, access_dedication_warning, height_conformity_flag,
-                    pf1_check)
+                    pf1_check, tdsf_cap, beachfront_fork)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -323,6 +323,8 @@ with tab_one:
             st.markdown(f'<div class="card">{t.reason}</div>', unsafe_allow_html=True)
             # Envelope math is Interp. No. 24 — Malibu only. Never run it elsewhere.
             if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
+                st.markdown(f'<div class="card card-note">{beachfront_fork(beachfront)}</div>',
+                            unsafe_allow_html=True)
                 cliff = access_dedication_warning(beachfront, over_cap)
                 if cliff:
                     st.markdown(f'<div class="card card-warn">{cliff}</div>',
@@ -379,7 +381,8 @@ with tab_one:
                     <span class="cite">prior ceiling: {basis}</span>
                     </div>""", unsafe_allow_html=True)
 
-                    rp = realistic_program(p.prior_sqft, ph, proposed_ceiling, basement)
+                    rp = realistic_program(p.prior_sqft, ph, proposed_ceiling, basement,
+                                           lot_sqft=p.lot_sqft, is_beachfront=beachfront)
                     st.markdown(f"""<div class="card">
                     <b>What you can actually build without a CDP</b><br>
                     Primary as of right <b>{rp['primary_as_of_right']:,} sf</b> &nbsp;·&nbsp;
@@ -389,7 +392,10 @@ with tab_one:
                     the 110%.</b> AB 462 (Oct 2025) killed Coastal Commission appeal authority
                     over local ADU CDPs and imposed a 60-day clock. Most underrated lever
                     available.<br><br>
-                    <b>Realistic ceiling: ~{rp['total_if_granted']:,} sf across TWO units.</b>
+                    <b>Realistic ceiling: ~{rp['total_if_granted']:,} sf across TWO units.</b><br>
+                    {rp['tdsf']['note']}
+                    {'<br><b style="color:#7a2518">TDSF BINDS BEFORE THE REBUILD RULE — this program busts the cap by ' + format(rp['total_if_granted'] - rp['tdsf']['cap'], ',') + ' sf.</b>' if rp['tdsf_binds'] else ''}
+                    <br><br>
                     <span class="cite">{rp['note']}<br><br>
                     That is a well-located small house with a guest unit. It is not the thing
                     that trades against Malibu beachfront comps. If the model needs a single

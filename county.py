@@ -496,8 +496,84 @@ def purchaser_diligence(p: Parcel) -> list:
     return flags
 
 
+def tdsf_cap(lot_sqft: Optional[float], is_beachfront: Optional[bool]) -> Optional[dict]:
+    """
+    MMC 17.40.040(A)(13) — Total Development Square Footage.
+
+    *** BEACHFRONT LOTS ARE EXEMPT FROM THIS SUBSECTION ENTIRELY. ***
+
+    That exemption is the plain text of the code, and it matters: on a beachfront
+    lot, TDSF is not a constraint at all, so the rebuild envelope plus an ADU is
+    limited by Interpretation No. 24 and nothing else.
+
+    On NON-beachfront lots the sliding scale binds:
+        TDSF = 17.7% of lot area + 1,000 sf   (lots up to 1/2 acre)
+        floor: lots of 5,000 sf or less are capped at 1,885 sf
+
+    Note the two-meter problem [Issue No. 5]: MMC 17.40.040(A)(13)(c) discounts the
+    first 1,000 sf of basement toward TDSF, but that discount does NOT carry over to
+    the 110% calculation. A basement can be TDSF-favoured and still consume the
+    rebuild envelope in full. Two different meters, and they don't talk.
+
+    An ADU over 800 sf counts toward TDSF where TDSF applies. On beachfront it
+    doesn't matter. Off beachfront it can bind before the rebuild rule does.
+    """
+    if is_beachfront is True:
+        return dict(applies=False,
+                    note=("<b>Beachfront — exempt from TDSF.</b> MMC 17.40.040(A)(13) "
+                          "exempts beachfront lots from the total-development-square-footage "
+                          "cap by its own terms. The rebuild envelope plus an ADU is limited "
+                          "by Interpretation No. 24 and nothing else here."))
+    if not lot_sqft:
+        return dict(applies=None,
+                    note=("<b>TDSF status unknown.</b> Lot size not returned by the county "
+                          "layer, and beachfront status not supplied. Off beachfront the cap "
+                          "is 17.7% of lot area + 1,000 sf (min 1,885 on lots ≤5,000 sf) and "
+                          "can bind before the rebuild rule does."))
+    cap = 1885 if lot_sqft <= 5000 else round(0.177 * lot_sqft + 1000)
+    return dict(applies=True, cap=cap,
+                note=(f"<b>TDSF cap ≈ {cap:,} sf</b> (17.7% of {lot_sqft:,.0f} sf + 1,000; "
+                      f"floor of 1,885 on lots ≤5,000 sf). Non-beachfront lots are subject to "
+                      f"this. An ADU over 800 sf counts toward it. Check the rebuild envelope "
+                      f"plus any ADU against this number — TDSF can bind before Interpretation "
+                      f"No. 24 does."))
+
+
+def beachfront_fork(is_beachfront: Optional[bool]) -> str:
+    """
+    Beachfront status is the single most load-bearing parcel fact in this tool, and
+    it cuts in OPPOSITE directions. It is not one flag; it is a fork.
+
+    It is not in the county record. It is determinable from the City's GIS layers or
+    by standing on the lot.
+    """
+    if is_beachfront is None:
+        return ("<b>Beachfront or not? This is the fork, and it isn't in the county "
+                "record.</b><br>"
+                "It cuts both ways, so 'unknown' is not a small gap:<br><br>"
+                "<b>Beachfront</b> — exempt from TDSF [MMC 17.40.040(A)(13)]. No Site Plan "
+                "Review under Issue No. 9. Height measured from the wave-action finish floor, "
+                "not grade. Setbacks by stringline. Seawall available through a "
+                "director-level rebuild permit. <i>But</i> exceeding the 10% cap triggers the "
+                "PRC 30212 public-access cliff, and armoring policy flips against you.<br><br>"
+                "<b>Non-beachfront</b> — TDSF binds (17.7% of lot + 1,000). Shifted bulk above "
+                "18ft outside the original envelope needs SPR. No access cliff.<br><br>"
+                "<span class='cite'>Determinable from the City's GIS layers, or by standing on "
+                "the lot. Free. Do it before anything else.</span>")
+    if is_beachfront:
+        return ("<span class='cite'><b>Beachfront.</b> Exempt from TDSF. No SPR under Issue "
+                "No. 9. Height from the wave-action finish floor. Stringline setbacks. Seawall "
+                "via director-level rebuild permit — <i>so long as you stay inside the 10% "
+                "cap</i>.</span>")
+    return ("<span class='cite'><b>Non-beachfront.</b> TDSF binds. Shifted bulk above 18ft "
+            "outside the original envelope triggers SPR [Issue No. 9] — take the allowance "
+            "laterally and inside the envelope to avoid it. No PRC 30212 access cliff "
+            "here.</span>")
+
+
 def realistic_program(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
-                      basement_sqft: float = 0.0):
+                      basement_sqft: float = 0.0, lot_sqft: Optional[float] = None,
+                      is_beachfront: Optional[bool] = None):
     """
     What you can actually build without a CDP — the honest ceiling.
 
@@ -510,15 +586,13 @@ def realistic_program(prior_sqft: float, prior_ceiling: float, proposed_ceiling:
       Commission and HCD to publish coastal-zone ADU streamlining guidance by
       1 July 2026 — that date has passed; check what actually issued.
 
-      This is the most underrated lever available. It does not consume the 110%.
+      The ADU does not consume the 110%. On beachfront it doesn't hit TDSF either,
+      because beachfront is TDSF-exempt. Off beachfront, an ADU over 800 sf counts
+      toward TDSF and can bind before the rebuild rule.
 
     Also real but small: Issue No. PF3 (Palisades, beachfront) — interior access
     stairs required by code because of the new FEMA finished-floor don't count
     toward the 10%. A free staircase.
-
-    Water tanks required by an agency are excluded from TDSF — note that is a TDSF
-    exclusion, NOT a 110% exclusion, and it applies to tanks, not living space.
-    Don't overread it.
 
     THE HONEST CONCLUSION
     On a 1,760 sf prior: ~1,936 sf primary + up to ~1,000 sf ADU = ~2,900 sf across
@@ -526,23 +600,28 @@ def realistic_program(prior_sqft: float, prior_ceiling: float, proposed_ceiling:
 
     That is a well-located small house with a guest unit. It is not the thing that
     trades against Malibu beachfront comps. If the model needs a single integrated
-    2,700+ sf luxury envelope, the exemption path does not produce it.
-
-    The lot may still work — as a small-house thesis, priced against small-house
-    comps, underwritten on speed and land basis rather than square footage. That is
-    a real strategy. It is a different strategy.
+    2,700+ sf luxury envelope, the exemption path does not produce it — and there is
+    no intermediate instrument. The DMWs in Ordinance 524 cover FEMA finished-floor
+    elevation, relocation, seawalls, OWTS and water tanks. None of them grants floor
+    area. The rebuild development permit covers shoring, OWTS, seawalls, driveways
+    and works necessary to construct the replacement structure. Not more house.
     """
     both = envelope_both_cases(prior_sqft, prior_ceiling, proposed_ceiling, basement_sqft)
     primary_aor = both["as_of_right"]["habitable"]
     primary_ifg = both["if_granted"]["habitable"]
     adu_max = 1000
+    t = tdsf_cap(lot_sqft, is_beachfront)
+    total_ifg = primary_ifg + adu_max
+    tdsf_binds = bool(t and t.get("applies") and t.get("cap") and total_ifg > t["cap"])
     return dict(
         primary_as_of_right=primary_aor,
         primary_if_granted=primary_ifg,
         adu_max=adu_max,
         garage_free=400,
         total_as_of_right=primary_aor + adu_max,
-        total_if_granted=primary_ifg + adu_max,
+        total_if_granted=total_ifg,
+        tdsf=t,
+        tdsf_binds=tdsf_binds,
         note=("Two units, not one integrated envelope. The ADU has its own kitchen and "
               "entry and does not consume the 110%."),
     )
