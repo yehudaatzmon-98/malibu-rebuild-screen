@@ -18,7 +18,8 @@ import streamlit as st
 from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_year,
                     split_address, ceiling_sensitivity, spr_check, purchaser_diligence,
                     realistic_program, access_dedication_warning, height_conformity_flag,
-                    pf1_check, tdsf_cap, beachfront_fork, baseline_provenance_warning)
+                    pf1_check, tdsf_cap, beachfront_fork, baseline_provenance_warning,
+                    the_record_exists, design_out_of_it)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -371,12 +372,21 @@ with tab_one:
                     <i>"may be permitted, <b>at the discretion of the planning director</b>
                     through approval of a planning verification, to increase the square
                     footage, height or bulk permitted by this title by 10 percent."</i><br><br>
-                    In practice it appears routine — Interpretation No. 24 spends twelve issues
-                    on <i>how</i> to calculate it, not <i>whether</i> to grant it. But the code
-                    text doesn't support underwriting it as certain, and it is the obvious lever
-                    if anyone wanted one. <b>Here it's worth {ifg['gross'] - aor['gross']:,} sf.</b>
-                    Model {aor['habitable']:,} as the base case.
+                    Interpretation No. 24 spends twelve issues on <i>how</i> to calculate it,
+                    not <i>whether</i> to grant it, which suggests routine administrative grant.
+                    <b>But that is an inference, not evidence</b> — and the evidence is
+                    obtainable (see below). The code text doesn't support underwriting it as
+                    certain, and it's the obvious lever if anyone wanted one.<br><br>
+                    <b>Here it's worth {ifg['gross'] - aor['gross']:,} sf.</b> Model
+                    {aor['habitable']:,} as the base case — not because it'll be denied, but
+                    because {ifg['gross'] - aor['gross']:,} sf shouldn't decide anything.
                     </div>""", unsafe_allow_html=True)
+
+                    with st.expander("No grant rate exists — but the record does", expanded=False):
+                        st.markdown(f'<div class="card">{the_record_exists()}</div>',
+                                    unsafe_allow_html=True)
+                        st.markdown(f'<div class="card card-warn">{design_out_of_it()}</div>',
+                                    unsafe_allow_html=True)
                     st.markdown(f"""<div class="card mono" style="font-size:0.75rem">
                     sqft ceiling &nbsp; {p.prior_sqft:,} × 1.10 = <b>{e['sqft_cap']:,}</b><br>
                     volume ceiling &nbsp; ({p.prior_sqft:,} × {ph}ft × 1.10) ÷ {proposed_ceiling}ft = <b>{e['vol_cap']:,}</b><br>
@@ -625,6 +635,19 @@ improvement value on the roll, not the sf field.
 - **Setbacks, FAR, zoning compliance.** Only the 18ft SPR trigger is checked.
 - **Whether SPR is appealable** to the Planning Commission and then Council. Unverified, and it materially changes tail risk.
 - **Cycle times.** No reliable post-fire Malibu SPR or planning-verification data exists. Any month figure here is an estimate.
+
+**On the things this tool won't estimate.** There's no published grant rate for the discretionary
++10%, and no dedication probability. That's right about *rates* and wrong about *evidence* — the
+difference is labour. Malibu has acted on roughly two dozen planning verifications since January
+2025: unscoreable as a sample, completely readable as a census. A PRA request reads all 22 and
+answers the real question — *has the Planning Director ever exercised that discretion adversely,
+and on what facts?* Same for the dedication: decades of Malibu beachfront CDP staff reports are
+searchable at documents.coastal.ca.gov. Nobody has run either, because the record is fourteen
+months old and the brokers are moving faster than the analysis.
+
+And even after reading all 22 you won't have a probability. So the discipline isn't better
+estimation — it's structures that don't need the estimate. Base case at 100%. Design out of the
+exaction rather than pricing it. Option the lot you can't baseline.
 - **Everything after entitlement.** Cost, carry, comps, exit, insurance, coastal engineering, debris, septic, seawall.
 
 This is a screen. It tells you whether a lot is worth an afternoon. It does not underwrite one.

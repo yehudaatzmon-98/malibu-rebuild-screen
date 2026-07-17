@@ -491,6 +491,92 @@ def purchaser_diligence(p: Parcel) -> list:
     return flags
 
 
+def the_record_exists() -> str:
+    """
+    THE CORRECTION THAT MATTERS MOST TO THIS TOOL.
+
+    Every version of this file has said some form of "Malibu has issued ~22 permits,
+    so there is no denominator, so no honest grant rate exists, so don't ask."
+
+    That is right about RATES and wrong about EVIDENCE, and the difference is just
+    labour.
+
+    22 is unscoreable as a sample and completely readable as a CENSUS. You don't
+    estimate from 22 files. You read all 22.
+
+    Nobody has done this because Malibu's post-fire record is fourteen months old and
+    the people who would normally have done it — the brokers, the land bankers — are
+    moving faster than the analysis. That is an information advantage sitting on a
+    public records portal.
+    """
+    return (
+        "<b>The tool can't give you a grant rate. The record can give you something "
+        "better.</b><br><br>"
+        "Malibu has acted on roughly two dozen planning verifications since January 2025. "
+        "That is unscoreable as a sample and <b>completely readable as a census</b>. You don't "
+        "estimate from 22 files — you read all 22.<br><br>"
+        "<b>The PRA request (cheap, and nobody has run it):</b> every planning verification "
+        "acted on since January 2025. For each — was the +10% requested? Granted? In full or "
+        "trimmed? Was the applicant a natural person or an entity? Was the property "
+        "owner-occupied at the fire date? Was anything conditioned that the code doesn't "
+        "require?<br><br>"
+        "That won't produce a rate. It answers the question you're actually asking, which "
+        "isn't <i>what's the probability</i> but <b>has the Planning Director ever exercised "
+        "that discretion against anyone, and on what facts?</b> If all 22 got the 10% "
+        "administratively, LLCs included, you don't have a rate — you have the complete "
+        "history of the discretion being exercised, and it has never been exercised adversely. "
+        "That is a defensible IC position. If it has, you'll know exactly what the trigger was, "
+        "which is worth more than any percentage.<br><br>"
+        "<b>Same structure for the access dedication.</b> Disaster rebuilds are a thin record, "
+        "but Malibu beachfront new-development CDPs are decades of searchable staff reports at "
+        "documents.coastal.ca.gov. How often did a lateral access condition attach? On what "
+        "facts? What was the seaward expansion where it did? That's not a probability anyone "
+        "hands you — it's a record you build in a week, and it's the only thing that tells you "
+        "whether <i>your</i> massing sits in the exaction zone or outside it.<br><br>"
+        "<span class='cite'>Why nobody's done it: the record is fourteen months old and the "
+        "brokers and land bankers are moving faster than the analysis. That's an information "
+        "advantage sitting on a public records portal.</span>")
+
+
+def design_out_of_it() -> str:
+    """
+    THE DISCIPLINE WHEN THERE IS NO BASE RATE.
+
+    Even after reading all 22, you won't have a probability. You'll have a census of
+    n=22 and a decade of adjacent CCC precedent, and you'll still be extrapolating.
+
+    So the IC question changes shape. It stops being "what's the probability" and
+    becomes "can the fund survive being wrong, and what does it cost to not need the
+    answer?"
+
+    Not better estimation. Structures that don't require the estimate.
+    """
+    return (
+        "<b>The discipline when there's no base rate isn't better estimation. It's "
+        "structures that don't need the estimate.</b><br><br>"
+        "&bull; <b>The +10%</b> — base case at 100%. On 1,650 sf the discretionary grant is "
+        "165 sf. If 165 sf decides your deal, the deal is the problem. Don't buy the "
+        "question.<br>"
+        "&bull; <b>The access dedication</b> — don't estimate it, <b>design out of it</b>. The "
+        "exaction risk is a property of your <i>massing</i>, not of the pathway. Expand "
+        "landward and vertically within stringline and the Nollan nexus thins to nothing; "
+        "widen along the beach and you hand the Commission the fit that Nollan itself "
+        "lacked. That's a site plan and a coastal engineer, answerable now, and it tells you "
+        "more than any probability.<br>"
+        "&bull; <b>An unscoreable lot</b> — option it, don't buy it. Or make the bid "
+        "contingent on establishing a baseline. Days and low four figures against the cost of "
+        "buying raw beachfront at rebuild-rights pricing.<br>"
+        "&bull; <b>PF1</b> — if a lot's thesis <i>is</i> the deemed-complete application, "
+        "you're buying a legal opinion, not dirt. Structure the value into a price adjustment "
+        "rather than your basis.<br><br>"
+        "<span class='cite'>Three memos in, the questions being asked hardest — the grant "
+        "rate, the dedication probability — are the two where no honest answer exists. The "
+        "ones that do have answers, and would actually move an IC, are phone calls and a title "
+        "search: prior height conformity on the beachfront lots, structure separations at "
+        "20314, whether any seller had a live application on January 6. Nobody has run "
+        "them.</span>")
+
+
 def vacancy_diagnostic(p: Parcel) -> str:
     """
     THE DIAGNOSTIC IS IMPROVEMENT VALUE, NOT SQUARE FOOTAGE.
