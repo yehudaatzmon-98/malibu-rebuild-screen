@@ -1,68 +1,45 @@
-# Malibu Rebuild Screen
+# Palisades · Malibu Lot Analyzer
 
-Takes a Redfin export of new listings and returns which lots are worth an afternoon.
+A two-stage development-underwriting funnel:
 
-## What it does
+1. **Screener** (`screen.py`) — one lot at a time. Eligibility, buildable envelope,
+   and the full rule engine: jurisdiction routing (Malibu Interp. No. 24 vs City of
+   LA EO1/EO8), the beachfront fork, TDSF, SPR suspension, the access cliff,
+   entitlement status, height conformity, the census/PRA move. Answers "can I build
+   it, and what."
 
-For every address in the file it queries the **LA County Assessor** (live, public, no key) and returns what actually burned — prior square footage, year built, units, use code, real coordinates — then applies **LCP & Zoning Code Interpretation No. 24** (adopted 15 Oct 2025) and stamps each lot ELIGIBLE / EXCLUDED / UNSCOREABLE, with the rule that produced the verdict.
+2. **Analyzer** (`app.py`) — a whole Redfin CSV at once. Runs each lot through the
+   screener's eligibility and envelope, then adds the money case: jurisdiction-
+   segmented comps, cost stack, return on cost, ranking. Answers "will it make
+   money," across the market.
 
-It is **not a valuation.** It answers one question: is this lot worth your time?
+## The two rules that keep it honest
 
-## Why the county lookup matters
+- **Comps are jurisdiction-segmented and never blended.** Malibu and Palisades are
+  different markets under different rulebooks. The loaded comp set is Palisades-only
+  (263 sold sales, 2023–2026), so Malibu lots return NO BASIS rather than a borrowed
+  number. Supply Malibu comps to price that side.
+- **Range, not verdict.** The comps don't reconcile tightly. Each lot shows a range
+  and what you'd have to believe — a sort order and a decision scaffold, not a green
+  light.
 
-A Redfin export has no prior square footage. Burned lots show dashes across beds/baths/sqft — that's how you know it's a lot. But prior sqft is the input the entire rebuild rule rests on, and it lives in the assessor record.
+## Files
+- `screen.py` — single-lot screener UI
+- `app.py` — batch analyzer UI
+- `engine.py` — money engine (comp matching, cost stack, return), UI-independent
+- `county.py` — LA County Assessor enrichment + the rule engine
+- `jurisdiction.py` — Malibu vs City of LA routing
+- `comps_database.csv` — 263 Palisades sold sales
+- `sample_redfin_export.csv` — demo input
 
-The county call is what makes this work without a manual lookup per lot. It also catches things a human had to read the rule to spot:
-
-- **Multifamily prior use** → No Net Loss (Issue No. 8 / SB 166). A 3-unit building replaced by a house requires 2 ADUs, which eat envelope. Auto-excluded.
-- **Assessor vs listing conflicts** → one lot in the test set had a county record of 1,671 sf against a listing claim of 2,452 sf. A 47% gap. Auto-flagged; a survey is required at Planning Verification precisely because of this (Issue No. 12).
-- **No prior structure on record** → no envelope to compute. Auto-marked unscoreable rather than guessed.
-
-## The finding this tool exists to surface
-
-**Interpretation No. 24, Issue No. 1: a replacement may not exceed 110% of the previous structure's bulk (volume), square footage, OR height.** Three ceilings, all binding at once.
-
-```
-buildable = min( prior_sf × 1.10 , (prior_sf × prior_ceiling × 1.10) ÷ proposed_ceiling )
-```
-
-The volume ceiling binds whenever you build taller ceilings than what burned. A 1963 beach house has ~8.5ft ceilings; a 2026 luxury build wants 10ft. At that ratio you get **less square footage than burned**, not the +10% the thesis assumes.
-
-On every lot tested, volume bound — not square footage.
-
-| Lot | Prior sf | Built | Buildable @10ft | vs prior |
-|---|---|---|---|---|
-| 20610 PCH | 1,760 | 1963 | 1,646 | −7% |
-| 21006 PCH | 989 | 1923 | 870 | −12% |
-| 20838 PCH | 1,970 | 2017 | 2,059 | +5% |
-| 20802 PCH | 2,261 | 1983 | 2,114 | −6% |
-| 20048 PCH | 1,671 | 1939 | 1,470 | −12% |
-
-## What's fixed and what's yours
-
-**Fixed (the rule, cited):** the 110% factor, three simultaneous ceilings, basements and subterranean garages counting toward the same 110%, No Net Loss on multifamily.
-
-**Yours:** the ceiling height you'd build, and any basement. Both are surfaced as inputs because they're decisions, not facts — and ceiling height is the single biggest lever in the whole rule.
-
-**Estimated:** prior ceiling height, derived from year built. No record source exists — it lives in the original plans.
-
-## Running it
-
-```
+## Run
+```bash
 pip install -r requirements.txt
-streamlit run screen.py
+streamlit run app.py      # the batch analyzer
+streamlit run screen.py   # the single-lot screener
 ```
 
-Deploy: push to GitHub, connect at share.streamlit.io. The county endpoint is public and needs no key, so it works on the free tier.
-
-## Data source
-
-`https://public.gis.lacounty.gov/public/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0`
-
-LA County Assessor parcel layer. ~2.4M parcels, refreshed weekly, public, no auth. Fields used: `SQFTmain1..5`, `YearBuilt1..5`, `Units1..5`, `UseCode`, `UseDescription`, `DesignType1..5`, `CENTER_LAT`, `CENTER_LON`.
-
-The address join is clean, not fuzzy: `SitusHouseNo` is a separate field in the county schema, so the match is an exact house number plus a street LIKE. No string-similarity guessing.
-
-## One caveat
-
-The county endpoint was verified live and its schema confirmed, but the sandbox this was built in blocks that host, so the actual query path is untested end to end. It will run on Streamlit Cloud, which has open egress. Verify on first run: use the "Check one address" tab with `20610 Pacific Coast Hwy` — the county should return 1,760 sf, built 1963, AIN 4450-005-060.
+## The yardstick (defaults)
+Construction $1,000/sqft fully loaded · contingency 8% · carry 3%/yr · selling 5% ·
+appreciation 3%/yr · new-build premium 10%. Every one is a slider; move it and the
+whole list re-scores together on the same version stamp.

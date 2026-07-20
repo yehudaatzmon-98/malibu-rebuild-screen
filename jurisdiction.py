@@ -144,6 +144,76 @@ def route(situs_city: Optional[str]) -> Jurisdiction:
              f"a spelling not yet in _MALIBU_SITUS / _LA_SITUS — add it there.")
 
 
+def la_envelope_estimate(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = None,
+                         storeys: Optional[int] = None,
+                         listing_sqft: Optional[int] = None) -> dict:
+    """
+    A REAL EO1 ENVELOPE FOR EVERY LA LOT — no LADBS footprint pull required.
+
+    The footprint was a detour. For a decision you need buildable GROSS, and under
+    EO1:
+
+      BASE CASE  = prior gross x 1.10.
+        If you rebuild the same massing (same storey count), gross is just prior
+        gross +10%. The county publishes prior gross. So the base case is ALWAYS
+        computable, with zero footprint. This is the number to screen on.
+
+      UPSIDE     = add a storey within the height cap.
+        This is where footprint would matter — but we can bound it without LADBS:
+
+          footprint_max = lot_sqft x coverage_ratio   (hard physical ceiling)
+          footprint_est = prior_gross / storeys        (if storeys known/inferred)
+
+        LA R1 lot coverage runs ~40-45%. Take 45% as the ceiling. A realistic added
+        storey can't push gross past footprint_max x (storeys+1), and won't exceed
+        the height district anyway.
+
+    So every LA lot gets: a base number (screen on this), and a bounded upside
+    (flagged, for the lots worth a closer look). Nothing returns blank.
+
+    All ESTIMATED and tagged as such — a batch screen can't pull the stamped plan
+    set. But an estimate you can act on beats a blank you can't.
+    """
+    if not prior_gross_sqft:
+        return dict(base=None, note="No prior gross sqft — supply it to estimate the EO1 envelope.")
+
+    base = round(prior_gross_sqft * 1.10)
+
+    # infer storeys if not given: Palisades stock over ~2,200 sf is typically 2-storey
+    if not storeys:
+        storeys = 2 if prior_gross_sqft > 2200 else 1
+        storey_src = "inferred from size"
+    else:
+        storey_src = "supplied"
+
+    footprint_est = round(prior_gross_sqft / storeys)
+
+    # coverage ceiling — the hard physical bound
+    coverage_cap = None
+    if lot_sqft:
+        coverage_cap = round(lot_sqft * 0.45)  # LA R1 ~45%
+        footprint_est = min(footprint_est, coverage_cap)
+
+    # upside: add one storey within footprint x110%
+    upside = round(footprint_est * 1.10 * (storeys + 1))
+    # can't exceed what coverage physically allows across the added storey
+    if coverage_cap:
+        upside = min(upside, round(coverage_cap * 1.10 * (storeys + 1)))
+
+    return dict(
+        base=base,
+        upside=upside,
+        footprint_est=footprint_est,
+        storeys=storeys,
+        storey_src=storey_src,
+        coverage_cap=coverage_cap,
+        note=(f"EO1 base = prior gross {prior_gross_sqft:,} × 1.10 = <b>{base:,} sf</b> "
+              f"(rebuild same massing — no footprint needed). Upside if you add a storey: "
+              f"~{upside:,} sf, from an estimated {footprint_est:,} sf footprint "
+              f"({storey_src}). Screen on the base; the upside flags lots worth an LADBS pull."),
+    )
+
+
 def la_envelope_indicative(prior_sqft: int, storeys: int, factor: float = 1.10):
     """
     INDICATIVE ONLY — not a permitted envelope.
