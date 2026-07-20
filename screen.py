@@ -22,9 +22,83 @@ from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_
                     the_record_exists, design_out_of_it, issue10_exposure, nollan_reality,
                     thesis_fit, entitlement_status)
 import jurisdiction as jur
+from engine import Assumptions, CompMarket, ProForma, what_youd_have_to_believe
+import pandas as _pd
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
                    initial_sidebar_state="collapsed")
+
+# money engine — comps loaded once, shared with the batch analyzer
+@st.cache_data
+def _load_comps():
+    try:
+        return _pd.read_csv("comps_database.csv")
+    except Exception:
+        return None
+
+_COMPS = _load_comps()
+_MKT = CompMarket(_COMPS) if _COMPS is not None else None
+
+
+def render_money(jurisdiction_code, buildable_sqft, ask_price, express, lat=None, lon=None):
+    """The return, inline. Envelope in, signal + arithmetic out — the analyzer's
+    money case on a single lot. Honest about what it can't price."""
+    if not buildable_sqft:
+        return
+    if _MKT is None:
+        st.markdown('<div class="card card-note"><span class="cite">Comp database not '
+                    'loaded — can\'t compute the return. Add comps_database.csv beside '
+                    'the app.</span></div>', unsafe_allow_html=True)
+        return
+    m = _MKT.match(jurisdiction_code, buildable_sqft, lat, lon)
+    a_ = Assumptions()
+    if not m.get("basis"):
+        st.markdown(
+            f'<div class="card card-none"><span class="stamp s-none">NO COMP BASIS</span>'
+            f'<br><span class="cite">{m["note"]}<br><br>Envelope is <b>{buildable_sqft:,.0f} '
+            f'sf</b> — eligible and buildable, but not priceable from the loaded comps. '
+            f'The rule side is done; the money side waits on comps.</span></div>',
+            unsafe_allow_html=True)
+        return
+    if not ask_price:
+        st.markdown(
+            f'<div class="card card-note"><b>Comps say ~${m["basis"]:,}/sf</b> '
+            f'({m["n"]} matched sales, ${m["low"]:,}–${m["high"]:,}).<br>'
+            f'<span class="cite">Enter an asking price above to get the return — it\'s the '
+            f'land cost in the pro forma.</span></div>', unsafe_allow_html=True)
+        return
+    pf = ProForma(buildable_sqft, float(ask_price), m["basis"], jurisdiction_code, a_,
+                  express=express, comp_low=m["low"], comp_high=m["high"])
+    r = pf.run()
+    b = r["base"]
+    sig = r["signal"]
+    sig_cls = {"STRONG": "s-strong", "BUY": "s-buy", "MAYBE": "s-maybe",
+               "PASS": "s-pass"}.get(sig, "s-none")
+    lo_roc, hi_roc = r["low"]["roc"], r["high"]["roc"]
+    w = what_youd_have_to_believe(pf)
+    st.markdown(f"""
+<div class="card card-money">
+  <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:8px;">
+    <span class="stamp {sig_cls}" style="font-size:0.95rem;">{sig}</span>
+    <span class="big">{b['roc']:.0%}</span>
+    <span class="lbl">return on cost</span>
+  </div>
+  <span class="cite">
+  Range <b>{lo_roc:.0%}</b> to <b>{hi_roc:.0%}</b> on the comp spread alone — the signal is
+  a sort order, not a green light.<br><br>
+  <b>The chain:</b><br>
+  &nbsp;&nbsp;buildable &nbsp; <b>{buildable_sqft:,.0f} sf</b><br>
+  &nbsp;&nbsp;exit basis &nbsp; ${m['basis']:,}/sf → ${b['effective_psf']:,}/sf after escalation + premium<br>
+  &nbsp;&nbsp;land &nbsp; ${float(ask_price):,.0f}<br>
+  &nbsp;&nbsp;construction &nbsp; ${b['construction']:,.0f} &nbsp;·&nbsp; contingency ${b['contingency']:,.0f}
+  &nbsp;·&nbsp; carry ${b['carry']:,.0f}<br>
+  &nbsp;&nbsp;total cost &nbsp; <b>${b['total_cost']:,.0f}</b><br>
+  &nbsp;&nbsp;net sale &nbsp; ${b['net_sale']:,.0f} &nbsp;·&nbsp; profit <b>${b['profit']:,.0f}</b><br><br>
+  <b>What you'd have to believe:</b> exit of ${w['needed_exit_psf']:,}/sf clears 20% ROC;
+  comps say ${w['comp_basis']:,}/sf ({w['gap']:+}%).<br>
+  <span style="font-size:0.75rem;">Yardstick: {a_.stamp()}</span>
+  </span>
+</div>""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- type & tone
 # The subject's world is the municipal record: assessor rolls, parcel maps, a
@@ -81,6 +155,15 @@ h1,h2,h3,h4 { font-family:'Newsreader', Georgia, serif !important; color: var(--
 .s-excl { color:var(--seal); border-color:var(--seal); }
 .s-unsc { color:var(--warn); border-color:var(--warn); }
 .s-rev  { color:var(--info); border-color:var(--info); }
+.s-strong { color:var(--ok);   border-color:var(--ok); }
+.s-buy    { color:var(--info); border-color:var(--info); }
+.s-maybe  { color:var(--warn); border-color:var(--warn); }
+.s-pass   { color:var(--seal); border-color:var(--seal); }
+.s-none   { color:var(--ink-faint); border-color:var(--ink-faint); }
+.big { font-family:'JetBrains Mono',monospace; font-size:1.9rem; font-weight:700;
+       color:var(--ink); line-height:1; }
+.lbl { font-family:'Inter',sans-serif; font-size:0.68rem; color:var(--ink-faint) !important;
+       letter-spacing:0.09em; text-transform:uppercase; font-weight:600; }
 
 /* figures — transcribed, so mono ------------------------------------------- */
 .mono { font-family:'JetBrains Mono',monospace; }
@@ -99,6 +182,9 @@ h1,h2,h3,h4 { font-family:'Newsreader', Georgia, serif !important; color: var(--
 .card b { font-weight:650; }
 .card-warn { border-left-color: var(--seal); background:#fffcfb; }
 .card-note { border-left-color: var(--ink-faint); background:var(--paper-2); }
+.card-none { border-left-color: var(--ink-faint); background:var(--paper-2); }
+.card-money { border-left-width:3px; border-left-color: var(--ink); background:#fffef9;
+              border-top:1px solid var(--rule); }
 
 /* captions — small but READABLE. never below 0.78rem, never below 4.5:1 ---- */
 .cite, .cite * { font-family:'Inter',sans-serif !important; font-size:0.82rem !important;
@@ -305,16 +391,21 @@ st.markdown("---")
 tab_batch, tab_one = st.tabs(["Screen a Redfin export", "Check one address"])
 
 with tab_one:
-    ca1, ca2, ca3 = st.columns([3, 1, 1])
+    ca1, ca2, ca3, ca4 = st.columns([3, 1, 1, 1])
     with ca1:
         a = st.text_input("Address", placeholder="20610 Pacific Coast Hwy")
     with ca2:
+        ask_price = st.number_input(
+            "Asking price ($)", 0, 100_000_000, 0, 50_000,
+            help="The list or offer price. Needed for the return — it's the land cost in "
+                 "the pro forma. Leave 0 to see the envelope and comps without the return.")
+    with ca3:
         claimed = st.number_input(
             "Prior sf the listing claims", 0, 50000, 0, 50,
             help="What the listing says burned. The tool compares it to the county record.")
-    with ca3:
+    with ca4:
         storeys_in = st.number_input(
-            "Storeys (City of LA only)", 0, 4, 0, 1,
+            "Storeys (LA only)", 0, 4, 0, 1,
             help="From the pre-fire sale listing. City of LA lots only. 0 if unknown.")
     st.markdown('<span class="cite">'
                 '<b>Prior sf the listing claims</b> — the tool checks it against the county. '
@@ -346,6 +437,29 @@ with tab_one:
             st.markdown(f'{stamp(t.verdict)}  <span class="cite">{j.name}'
                         f'{" · " + t.rule if t.rule else ""}</span>',
                         unsafe_allow_html=True)
+
+            # ---- THE RETURN, INLINE — the analyzer's money case on this one lot ----
+            # Compute the buildable number for whichever jurisdiction, then price it.
+            _build = None
+            _express = True
+            if _ent and _ent["ranks_top"] and plan_sf:
+                _build = plan_sf  # approved plans ARE the envelope
+            elif t.jurisdiction == jur.MALIBU and p.prior_sqft:
+                _ph, _ = ceiling_from_year(p.year_built, prior_override or None)
+                if _ph:
+                    _build = envelope_both_cases(
+                        p.prior_sqft, _ph, proposed_ceiling, basement
+                    )["as_of_right"]["habitable"]
+                _express = True
+            elif j.code == jur.CITY_OF_LA and p.prior_sqft:
+                _est = jur.la_envelope_estimate(p.prior_sqft, lot_sqft=p.lot_sqft,
+                                                storeys=storeys_in or None)
+                _build = _est.get("base")
+                _express = False
+            if _build:
+                render_money(j.code, _build, ask_price, _express,
+                             lat=getattr(p, "lat", None), lon=getattr(p, "lon", None))
+
             if p.note:
                 st.markdown(f'<div class="card mono" style="font-size:0.75rem">{p.note}</div>',
                             unsafe_allow_html=True)
