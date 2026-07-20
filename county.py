@@ -318,15 +318,15 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None, storeys=None) -> Tr
         return Triage("UNSCOREABLE", j.note, "", j.code)
 
     if j.code == jur.CITY_OF_LA:
-        # The rule is known and cited. The INPUT it needs (prior footprint) is not
-        # published by the Assessor. Name the rule, name the gap, refuse the number.
-        # The discrepancy check runs FIRST and runs everywhere — it is the most
-        # valuable output the tool has and it is not Malibu-specific.
+        # The rule is known and cited. With prior gross sqft we CAN compute a base
+        # EO1 envelope (rebuild same massing = prior x 1.10) — no footprint needed.
+        # Only the storey-add upside needs footprint, and that's flagged as upside.
         note = jur.la_review_note(p.prior_sqft, p.year_built, storeys, address=p.situs or None)
         d = _discrepancy(p, listing_sqft)
         if d:
             note = f"{d}<br><br>{note}"
-        return Triage("REVIEW", note, j.rulebook, j.code)
+        verdict = "SCOREABLE" if p.prior_sqft else "REVIEW"
+        return Triage(verdict, note, j.rulebook, j.code)
 
     # --- City of Malibu: Interpretation No. 24 ---
     if not p.prior_sqft:

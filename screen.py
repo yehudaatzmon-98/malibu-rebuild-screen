@@ -177,7 +177,7 @@ label, .stTextInput label, .stNumberInput label, .stSelectbox label,
 
 
 def stamp(v):
-    cls = {"ELIGIBLE": "s-elig", "EXCLUDED": "s-excl",
+    cls = {"ELIGIBLE": "s-elig", "SCOREABLE": "s-elig", "EXCLUDED": "s-excl",
            "UNSCOREABLE": "s-unsc", "REVIEW": "s-rev"}.get(v, "s-rev")
     return f'<span class="stamp {cls}">{v}</span>'
 
@@ -560,7 +560,7 @@ with tab_batch:
         prog.empty()
 
         df = pd.DataFrame(rows)
-        order = {"ELIGIBLE": 0, "REVIEW": 1, "UNSCOREABLE": 2, "EXCLUDED": 3}
+        order = {"ELIGIBLE": 0, "SCOREABLE": 1, "REVIEW": 2, "UNSCOREABLE": 3, "EXCLUDED": 4}
         df = df.sort_values("Verdict", key=lambda s: s.map(order))
 
         n_e = (df.Verdict == "ELIGIBLE").sum()
@@ -568,7 +568,7 @@ with tab_batch:
         st.markdown(f"### {n_e} scoreable · {n_r} City of LA (different rulebook) · "
                     f"{len(df) - n_e - n_r} out")
 
-        for v in ["ELIGIBLE", "REVIEW", "UNSCOREABLE", "EXCLUDED"]:
+        for v in ["ELIGIBLE", "SCOREABLE", "REVIEW", "UNSCOREABLE", "EXCLUDED"]:
             sub = df[df.Verdict == v]
             if not len(sub):
                 continue

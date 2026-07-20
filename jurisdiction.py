@@ -317,36 +317,36 @@ def la_review_note(prior_sqft: Optional[int], year_built: Optional[int],
         "rebuild bypasses local Coastal Act and CEQA review. Under EO8 the prior "
         "envelope is not a ceiling — LAMC zoning is.",
         "",
-        "<b>Why this lot is not scored:</b>",
-        "EO1's cap is on <b>prior footprint</b>. The Assessor publishes gross square "
-        "footage and does not publish footprint or story count.",
+        "<b>The number to screen on — no footprint needed:</b>",
+        "EO1 lets you rebuild footprint × 110%, and add a storey within the height cap. "
+        "If you rebuild the <b>same massing</b>, buildable gross is just prior gross × 1.10 "
+        "— and the county publishes prior gross. So the base envelope is always computable. "
+        "Footprint only matters for the storey-add upside, which is bounded below.",
     ]
+    est = la_envelope_estimate(prior_sqft, lot_sqft=None, storeys=storeys)
+    if est.get("base"):
+        lines += [
+            "",
+            f"<b>EO1 BASE ≈ {est['base']:,} sf</b> &nbsp; "
+            f"<span class='cite'>(prior gross {prior_sqft:,} × 1.10, rebuild same massing "
+            f"— sourced from the county, no footprint required). This is the screening "
+            f"number.</span>",
+            f"<b>+ storey upside ≈ {est['upside']:,} sf</b> &nbsp; "
+            f"<span class='cite'>if you add a storey within the height cap, from an "
+            f"estimated {est['footprint_est']:,} sf footprint ({est['storey_src']}). "
+            f"ESTIMATED — this is the number that's worth an LADBS pull to firm up, not one "
+            f"to underwrite blind.</span>",
+        ]
     if prior_sqft and storeys:
         ind = la_envelope_indicative(prior_sqft, storeys)
         lines += [
             "",
-            f"<b>INDICATIVE ONLY — you supplied {storeys} storeys.</b>",
-            f"County shows <b>{prior_sqft:,} sf gross</b> over {storeys} storeys, so the "
-            f"footprint is roughly <b>{ind['footprint_est']:,} sf</b>. "
-            f"EO1 caps that at 110% = <b>{ind['footprint_cap']:,} sf</b> of footprint.",
-            f"&bull; Rebuild {storeys} storeys on it: ~<b>{ind['same_storeys']:,} sf</b> gross.",
-            f"&bull; EO1 permits a new storey within the height cap: "
-            f"~<b>{ind['plus_one_storey']:,} sf</b> gross at {storeys + 1} storeys.",
-            "",
-            "<span class='cite'>TAGGED ESTIMATED-FROM-LISTING, NOT SOURCED. Dividing gross "
-            "by storeys assumes every floor has the same area. Real houses rarely do — a "
-            "second floor is commonly bedrooms over PART of the ground floor. A 3,339 sf "
-            "two-storey home might be 2,000 down and 1,339 up, giving a 2,000 sf "
-            "footprint, not 1,670. That is 363 sf of permitted footprint and it compounds "
-            "with every storey. This is a bracket that tells you whether the lot is worth "
-            "an LADBS request. It is not the number you underwrite.</span>",
+            f"<span class='cite'>You supplied {storeys} storeys, so footprint ≈ "
+            f"{ind['footprint_est']:,} sf and EO1 caps it at {ind['footprint_cap']:,} sf. "
+            f"Rebuild {storeys} storeys: ~{ind['same_storeys']:,} sf. Add one: "
+            f"~{ind['plus_one_storey']:,} sf. Still estimated — dividing gross by storeys "
+            f"assumes even floors, which rarely holds; firm it with the plan set.</span>",
         ]
-    elif prior_sqft:
-        lines.append(
-            f"County shows <b>{prior_sqft:,} sf gross</b>. If that was single-storey the "
-            f"footprint is {prior_sqft:,}; if two-storey it is ~{round(prior_sqft/2):,}. "
-            f"Those produce completely different EO1 envelopes and the parcel record "
-            f"cannot distinguish them. Any envelope printed here would be a guess.")
     lines += [
         "",
         "<b>To unlock it — two inputs:</b> prior footprint and story count.",
