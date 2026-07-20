@@ -842,6 +842,112 @@ def beachfront_fork(is_beachfront: Optional[bool]) -> str:
             "here.</span>")
 
 
+def thesis_fit(prior_sqft: Optional[int], is_beachfront: Optional[bool] = None) -> str:
+    """
+    Score the lot against the thesis Tal actually landed on in the 20 July meeting,
+    which is NOT the thesis the tool was built for.
+
+    His words: "it's better for us to find properties that had a big house before,
+    that we can build the same size, perhaps with 10% but that 10% will be bonus,
+    not guaranteed."
+
+    So the screen inverts. The old tool asked "how much can I add?" This asks "what
+    burned here, and was it already big enough to be the product?" A lot whose prior
+    house was already ~2,700+ sf lets you rebuild the product like-for-like — no
+    discretionary grant, no CDP, no fight. A lot whose prior house was 900 sf can
+    only reach the product through exactly the entitlement risk he wants to avoid.
+
+    Under this thesis the value of a burn lot is what burned on it. A big recent
+    house on a buildable lot is the asset. The rebuild rule is a floor you're
+    standing on, not a ceiling you're fighting.
+    """
+    if not prior_sqft:
+        return ("<span class='cite'>No prior square footage, so thesis fit can't be scored — "
+                "resolve the baseline first. A lot with no prior structure only fits the "
+                "thesis if it arrives with approved plans (set entitlement status above).</span>")
+    lf = prior_sqft
+    lf10 = round(prior_sqft * 1.10)
+    if prior_sqft >= 2500:
+        tier = ("<b>STRONG THESIS FIT.</b> Prior house was already large. You rebuild the "
+                "product like-for-like — no discretionary +10%, no CDP, no fight. This is "
+                "exactly the lot the strategy calls for: what burned here IS the product.")
+        color = "#1f5c2e"
+    elif prior_sqft >= 1800:
+        tier = ("<b>MODERATE FIT.</b> Prior house was mid-sized. Like-for-like gets you a "
+                "reasonable home; the +10% helps but isn't the difference between viable and "
+                "not. Workable without entitlement risk.")
+        color = "#8a5a00"
+    else:
+        tier = ("<b>WEAK FIT for the like-for-like thesis.</b> Prior house was small. "
+                "Reaching a beachfront-comp product means exceeding the envelope — which is "
+                "the discretionary grant, the CDP, and (on beachfront) the access cliff. This "
+                "lot only works as a small-house play, or if it carries approved plans.")
+        color = "#7a2518"
+    return (f"<b style='color:{color}'>{tier}</b><br>"
+            f"<span class='cite'>Rebuild like-for-like: <b>{lf:,} sf</b>. With the discretionary "
+            f"+10% if granted: {lf10:,} sf. Under the thesis, model the {lf:,} and treat the "
+            f"grant as bonus.</span>")
+
+
+def entitlement_status(has_plans: str, plan_sqft: Optional[int] = None,
+                       is_beachfront: Optional[bool] = None) -> Optional[dict]:
+    """
+    THE CONSTRAINT ISN'T ALWAYS THE REBUILD RULE.
+
+    Two lots defeated the screener because it assumed the binding constraint was
+    always Interpretation No. 24 / EO1. It isn't. A lot can arrive already entitled,
+    and then the plans ARE the envelope — the rebuild math is moot.
+
+    This maps onto the thesis Tal landed on: find lots that are easy to build big,
+    treat the +10% as bonus not basis. An approved-plans lot is the purest version
+    of that — zero entitlement risk, start tomorrow. The tool should rank those at
+    the TOP, not choke on them for lacking a prior square footage.
+
+    Three states, in descending order of how much they de-risk the deal:
+
+      APPROVED  — plans approved, ready to issue, or permits pulled. The envelope is
+                  whatever was approved. Rebuild math irrelevant. Best possible
+                  status: buy the entitlement, not the argument.
+      IN_PROCESS — an application on file. PF1 territory if it predates the fire.
+                  Real option value, not yet certain.
+      NONE      — no entitlement. The rebuild rule governs; the rest of the tool
+                  applies normally.
+    """
+    if has_plans == "APPROVED":
+        lines = [
+            "<b>ALREADY ENTITLED — the plans are the envelope. The rebuild math below "
+            "doesn't govern.</b>",
+        ]
+        if plan_sqft:
+            lines.append(f"Approved for <b>{plan_sqft:,} sf</b>. That number isn't subject to "
+                         f"the +10% ceiling, the volume cap, or a discretionary grant — it's "
+                         f"approved.")
+        lines += [
+            "The strongest status a lot can have, and it maps to the thesis directly: buy lots "
+            "that are easy to build big, and an approved-plans lot has <b>zero entitlement "
+            "risk</b>. You start tomorrow.",
+            "",
+            "<span class='cite'><b>Verify the plans are real, current, and transferable:</b> "
+            "pull the stamped set and the permit / Ready-to-Issue status from the jurisdiction "
+            "(LADBS for City of LA, Malibu Planning for Malibu). Approved plans generally run "
+            "with the property, but an RTI status can lapse and permits have their own clocks. "
+            "Make delivery of the stamped set a PSA condition. If the thesis of the lot IS the "
+            "plans, you're buying an entitlement — price it there, not in the dirt.</span>",
+        ]
+        return dict(status="APPROVED", ranks_top=True, note="<br>".join(lines))
+
+    if has_plans == "IN_PROCESS":
+        return dict(status="IN_PROCESS", ranks_top=False, note=(
+            "<b>Application on file — real option value, not yet certain.</b> If it was "
+            "deemed complete before the fire, this is PF1 territory: the owner may build both "
+            "the replacement and the pending application, combined and treated as like-for-"
+            "like. Confirm the status and the date, and whether it transfers to a purchaser "
+            "(unresolved — ask Community Development via a neutral hypothetical, not in the "
+            "fund's name). Structure the value into a price adjustment, not your basis."))
+
+    return None
+
+
 def realistic_program(prior_sqft: float, prior_ceiling: float, proposed_ceiling: float,
                       basement_sqft: float = 0.0, lot_sqft: Optional[float] = None,
                       is_beachfront: Optional[bool] = None):

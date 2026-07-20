@@ -19,7 +19,8 @@ from county import (lookup, triage, envelope, envelope_both_cases, ceiling_from_
                     split_address, ceiling_sensitivity, spr_check, purchaser_diligence,
                     realistic_program, access_dedication_warning, height_conformity_flag,
                     pf1_check, tdsf_cap, beachfront_fork, baseline_provenance_warning,
-                    the_record_exists, design_out_of_it, issue10_exposure, nollan_reality)
+                    the_record_exists, design_out_of_it, issue10_exposure, nollan_reality,
+                    thesis_fit, entitlement_status)
 import jurisdiction as jur
 
 st.set_page_config(page_title="Rebuild Screen", layout="wide",
@@ -259,6 +260,24 @@ with st.expander("What you'd build — your calls, not the rule's", expanded=Fal
                     unsafe_allow_html=True)
 
     st.markdown("")
+    ce1, ce2 = st.columns([1, 1])
+    with ce1:
+        plans = st.selectbox(
+            "Does the lot already have plans / permits?",
+            ["None", "Application in process", "Approved / ready-to-issue"],
+            help="Approved plans ARE the envelope — they moot the rebuild math entirely.")
+        plans_state = {"None": "NONE", "Application in process": "IN_PROCESS",
+                       "Approved / ready-to-issue": "APPROVED"}[plans]
+        st.markdown('<span class="cite">If a lot arrives entitled, the plans are the '
+                    'envelope and the rebuild rule doesn\'t govern. This is the strongest '
+                    'status a lot can have — it ranks at the top.</span>',
+                    unsafe_allow_html=True)
+    with ce2:
+        plan_sf = st.number_input(
+            "Approved plan sqft (if known)", 0, 20000, 0, 100,
+            help="From the stamped plan set or the listing (e.g. 'plans for 5,200 sf approved').")
+
+    st.markdown("")
     c6, c7 = st.columns(2)
     with c6:
         hc = st.selectbox(
@@ -315,6 +334,15 @@ with tab_one:
         else:
             t = triage(p, listing_sqft=claimed or None, storeys=storeys_in or None)
             j = jur.route(p.situs_city)
+            # Approved plans moot the footprint question in EITHER jurisdiction.
+            _ent = entitlement_status(plans_state, plan_sf or None, beachfront)
+            if _ent and _ent["ranks_top"]:
+                st.markdown(f'{stamp("ELIGIBLE")}  <span class="cite">already entitled</span>',
+                            unsafe_allow_html=True)
+                st.markdown(f'<div class="card">{_ent["note"]}</div>', unsafe_allow_html=True)
+                st.markdown('<span class="cite">The rule readout below is context only — '
+                            'the approved plans govern, not the rebuild math.</span>',
+                            unsafe_allow_html=True)
             st.markdown(f'{stamp(t.verdict)}  <span class="cite">{j.name}'
                         f'{" · " + t.rule if t.rule else ""}</span>',
                         unsafe_allow_html=True)
@@ -324,6 +352,13 @@ with tab_one:
             st.markdown(f'<div class="card">{t.reason}</div>', unsafe_allow_html=True)
             # Envelope math is Interp. No. 24 — Malibu only. Never run it elsewhere.
             if t.verdict == "ELIGIBLE" and t.jurisdiction == jur.MALIBU and p.prior_sqft:
+                ent = entitlement_status(plans_state, plan_sf or None, beachfront)
+                if ent:
+                    css = "card" if ent["ranks_top"] else "card card-note"
+                    st.markdown(f'<div class="{css}">{ent["note"]}</div>',
+                                unsafe_allow_html=True)
+                st.markdown(f'<div class="card">{thesis_fit(p.prior_sqft, beachfront)}</div>',
+                            unsafe_allow_html=True)
                 st.markdown(f'<div class="card card-warn">'
                             f'{baseline_provenance_warning(p)}</div>',
                             unsafe_allow_html=True)
