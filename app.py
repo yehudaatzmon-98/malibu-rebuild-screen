@@ -375,15 +375,28 @@ for _, x in df.iterrows():
     # the 30->5 worksheet, per lot, kill-ordered
     card = x.get("_card")
     if isinstance(card, list) and card:
-        with st.expander(f"Diligence — what to verify before this makes the short list"):
+        with st.expander("How to check this lot — work top to bottom, stop if any step fails"):
+            st.markdown('<span class="cite">Do the steps in order. Each one is cheap to start '
+                        'and the first ones are most likely to kill a bad lot — so a dead lot '
+                        'dies fast, before you spend a phone call on it.</span>',
+                        unsafe_allow_html=True)
             for it in card:
-                badge = {"KNOWN":"✓ known","VERIFY":"~ verify","FIND":"→ find"}.get(it.status, it.status)
+                mins = f'<span class="cite"> · {it.minutes}</span>' if it.minutes else ""
+                ask = ""
+                if it.ask_verbatim:
+                    ask = (f'<div style="margin-top:6px;padding:8px 12px;background:#f2f0ea;'
+                           f'border-left:2px solid var(--ink);"><span class="cite">'
+                           f'<b>Say this:</b> {it.ask_verbatim}</span></div>')
                 st.markdown(
-                    f'<div class="card"><b>{it.rank}. {it.question}</b> &nbsp;'
-                    f'<span class="cite">[{badge}]</span><br>'
-                    f'<span class="cite"><b>Have:</b> {it.have}<br>'
-                    f'<b>Get it:</b> {it.where}<br>'
-                    f'<b>Kills it if:</b> {it.kills_if}</span></div>',
+                    f'<div class="card">'
+                    f'<b>Step {it.rank}: {it.question}</b>{mins}<br><br>'
+                    f'<b>→ Do this now:</b> {it.do_now or it.where}<br>'
+                    f'{ask}'
+                    f'<span class="cite" style="display:block;margin-top:8px;">'
+                    f'<b>What we already know:</b> {it.have}<br>'
+                    f'{"<b>Where:</b> " + it.where + "<br>" if it.do_now and it.where else ""}'
+                    f'<b style="color:#7a2518;">✕ Drop the lot if:</b> {it.kills_if}'
+                    f'</span></div>',
                     unsafe_allow_html=True)
 
 st.markdown("---")

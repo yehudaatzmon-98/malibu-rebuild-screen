@@ -42,6 +42,9 @@ class DiligenceItem:
     have: str              # what we know now (may be empty)
     where: str             # link or instruction to resolve it
     kills_if: str          # the answer that ends the deal
+    do_now: str = ""       # the ONE action to take, imperative
+    ask_verbatim: str = "" # the exact words to say on a call, if this is a call step
+    minutes: str = ""      # rough time cost, so he can plan the batch
 
 
 def build_card(*, address: str, jurisdiction: str, prior_sqft: Optional[int],
@@ -61,109 +64,122 @@ def build_card(*, address: str, jurisdiction: str, prior_sqft: Optional[int],
 
     # 1 — PRIOR SQFT REAL? Everything rests on it. The envelope, the cost, the return.
     if prior_sqft and imp_value and imp_value > 0:
-        have = (f"County shows {prior_sqft:,} sf and taxes an improvement (${imp_value:,}), "
-                f"so a structure existed. Number is the Assessor's, not a survey.")
+        have = (f"County shows {prior_sqft:,} sf and taxes a building worth ${imp_value:,}, "
+                f"so a house almost certainly stood here. Good sign — but confirm.")
         status = "VERIFY"
     elif prior_sqft:
-        have = f"County shows {prior_sqft:,} sf, but no improvement value to corroborate it."
+        have = (f"County shows {prior_sqft:,} sf, but no building value on the tax roll to "
+                f"back it up. Might just be a records gap — but confirm a house was here.")
         status = "VERIFY"
     else:
-        have = "No prior sqft in the county record. Blank cell, not a vacancy finding."
+        have = "County shows no square footage. Could be a records gap, could be empty land."
         status = "FIND"
     items.append(DiligenceItem(
-        rank=1, question="Is the prior square footage real?",
-        status=status, have=have,
-        where=("Pre-fire listing (" +
-               (f"https://www.redfin.com/city/search?q={enc}" if enc else "Redfin/Zillow") +
-               ") states floor-by-floor; CAL FIRE DINS ('DINS 2025 Palisades Public View') "
-               "recorded what stood on 7 Jan; seller's insurance replacement estimate is the "
-               "gold copy. Ask the agent for the insurance file."),
-        kills_if="Genuinely vacant — no baseline, no rebuild rights. Reprice or walk."))
+        rank=1, question="Was there really a house here before the fire?",
+        status=status, have=have, minutes="5 min, online",
+        do_now=("Open the pre-fire Redfin/Zillow listing for this address and check it "
+                "describes an actual house (beds, baths, floors). If the listing is gone, "
+                "search CAL FIRE DINS ('DINS 2025 Palisades Public View') for the address."),
+        where=(f"Redfin: https://www.redfin.com/city/search?q={enc}" if enc else
+               "Search the address on Redfin/Zillow") +
+              "   ·   DINS: search 'DINS 2025 Palisades Public View'",
+        kills_if="It was always empty land — no house ever built. Then there are no rebuild "
+                 "rights and the whole deal falls apart. Drop it or offer raw-land price.",
+        ask_verbatim=""))
 
-    # 2 — BEACHFRONT? Forks the whole envelope (TDSF, SPR, access cliff, height basis).
+    # 2 — BEACHFRONT? Malibu only. Forks the whole envelope.
     if jurisdiction == "MALIBU":
         if is_beachfront is None:
             items.append(DiligenceItem(
-                rank=2, question="Beachfront or not?",
-                status="FIND",
-                have="Not in the county record. Forks everything: TDSF, SPR, height basis, "
-                     "and the access cliff all flip on this.",
-                where="City of Malibu GIS parcel layer, or stand on the lot. Free, one lookup.",
-                kills_if="Beachfront + a plan over the 10% cap = permanent public-access "
-                         "dedication risk. Changes what the exit buyer is buying."))
-        else:
-            items.append(DiligenceItem(
-                rank=2, question="Beachfront or not?",
-                status="KNOWN",
-                have=("Beachfront — TDSF-exempt, no SPR, height from wave-action floor, but "
-                      "the access cliff applies over 10%." if is_beachfront else
-                      "Non-beachfront — TDSF binds, SPR above 18ft, no access cliff."),
-                where="Confirmed. No action.",
-                kills_if="—"))
+                rank=2, question="Is this lot right on the beach?",
+                status="FIND", minutes="2 min, online",
+                have="Not in the county record, and it changes everything about what you can "
+                     "build. Must confirm.",
+                do_now="Look at the lot on a map. Does it front the sand directly, or is there "
+                       "a road/row of houses between it and the water?",
+                where="City of Malibu GIS map, or just Google Maps satellite view.",
+                kills_if="If it's beachfront AND you want to build more than 10% bigger, you "
+                         "can be forced to give the public a permanent walkway across the lot. "
+                         "That scares off your eventual buyer.",
+                ask_verbatim=""))
 
-    # 3 — ARE THE COMPS REAL? The database gives a basis; the winner needs the 3
-    #     actual nearby sales an appraiser will use.
+    # 3 — DO THE COMPS HOLD UP? The exit price is the whole return.
     if matched_comps:
         top = matched_comps[:3]
         lines = "; ".join(
-            f"{c.get('address','?')} {c.get('sqft','?')}sf ${c.get('psf','?')}/sf {c.get('sold','?')}"
-            for c in top)
-        where = "Eyeball these on Redfin: " + " | ".join(
-            c.get("url", c.get("address", "")) for c in top if c.get("url") or c.get("address"))
+            f"{c.get('address','?')} ({c.get('sqft','?')} sf, ${c.get('psf','?')}/sf, "
+            f"sold {c.get('sold','?')})" for c in top)
+        urls = " | ".join(c.get("url", c.get("address", ""))
+                          for c in top if c.get("url") or c.get("address"))
         items.append(DiligenceItem(
-            rank=3, question="Do the exit comps actually resemble this lot?",
-            status="VERIFY",
-            have=f"Engine matched: {lines}",
-            where=where,
-            kills_if="The nearby real sales are materially below the matched basis — the "
-                     "exit assumption doesn't hold and the ROC is fiction."))
+            rank=3, question="Will the finished house actually sell for what we assumed?",
+            status="VERIFY", minutes="5 min, online",
+            have=f"The return is based on these 3 recent nearby sales: {lines}",
+            do_now="Open the 3 sales below and sanity-check they're genuinely similar — same "
+                   "kind of street, similar size, recent. If they look like nicer or bigger "
+                   "homes than what you'd build here, the exit price is too optimistic.",
+            where=f"Pull these up on Redfin: {urls}",
+            kills_if="The real nearby sales are clearly cheaper than the tool assumed — then "
+                     "the profit is fiction and the ranking is wrong for this lot.",
+            ask_verbatim=""))
     else:
         items.append(DiligenceItem(
-            rank=3, question="Do the exit comps actually resemble this lot?",
-            status="FIND",
-            have="No matched comps (unpriceable market or missing envelope).",
-            where="Pull 3 sold sales within ~0.25 mi at the target finished size.",
-            kills_if="No comparable sales exist — you're guessing at exit."))
+            rank=3, question="Will the finished house actually sell for what we assumed?",
+            status="FIND", minutes="10 min, online",
+            have="No comps matched (Malibu lot, or missing data).",
+            do_now="Pull 3 recent sold homes within about a quarter-mile, similar size, and "
+                   "note their price per square foot.",
+            where="Redfin → filter to Sold, draw a small circle around the lot.",
+            kills_if="No comparable sales exist nearby — you're guessing at the exit price.",
+            ask_verbatim=""))
 
-    # 4 — CAN YOU CONTROL IT? A great lot you can't tie up is worthless.
-    control_have = "Not in any record. The single most important factual gap after the baseline."
-    if breakeven:
-        control_have = (f"<b>Your number before you call: {breakeven}.</b> " + control_have)
+    # 4 — CAN YOU ACTUALLY BUY IT, AT A PRICE THAT WORKS? The agent call.
+    walk = f" {breakeven}." if breakeven else "."
     items.append(DiligenceItem(
-        rank=4, question="What's the real status — listed, LOI, option, or controlled?",
-        status="FIND",
-        have=control_have,
-        where=("Call the listing agent. Ask: still available, any offers in, will the seller "
-               "do an option or a contingency period. You know your walk-away discount above — "
-               "if the seller won't get near it, move on."),
-        kills_if="Already under contract, or the seller won't grant time — or won't move "
-                 "enough on price to clear the breakeven."))
+        rank=4, question="Can we actually tie it up — and at a price that still profits?",
+        status="FIND", minutes="1 call, ~10 min",
+        have=(f"This is the phone call. Before you dial, know your ceiling:{walk} "
+              f"If the seller won't get near that, it's not worth pursuing."),
+        do_now="Call the listing agent. Use the script on the right. If they say it's already "
+               "in escrow, or the seller wants full price and won't give you time to check "
+               "things, cross it off and move to the next lot.",
+        where="Listing agent — number is on the Redfin/Zillow listing.",
+        ask_verbatim=("\"Hi, I'm calling about [address]. Is it still available? "
+                      "Are there any offers in right now? "
+                      "Is the seller open to an option period or a short due-diligence window "
+                      "before closing? And is there any flexibility on the asking price?\""),
+        kills_if="Already under contract, seller won't grant any diligence time, or won't "
+                 "move enough on price to leave a profit."))
 
-    # 5 — THE UNRECORDED KILLER. Lot-specific flags from the screener go here, plus
-    #     the always-ask items.
+    # 5 — HIDDEN KILLERS. Lot-specific flags plus the always-ask seller questions.
     flag_text = ""
     if lot_flags:
-        flag_text = " ".join(lot_flags)
+        flag_text = " ".join(lot_flags) + " "
     items.append(DiligenceItem(
-        rank=5, question="What kills this that isn't in any record?",
-        status="FIND",
-        have=(flag_text or "No lot-specific flag from the screener — run the standard checks."),
-        where=("Site visit: view corridor, access road, setback, debris/remediation status. "
-               "Ask the seller: pre-fire permit application on file (PF1), did they take the "
-               "fee waiver, any temporary-housing covenant. Make plan/survey delivery a PSA "
-               "condition."),
-        kills_if="Blocked view after neighbor rebuilds, no legal access, unresolved debris "
-                 "lien, or a recorded covenant that transfers to you."))
+        rank=5, question="Anything that could wreck it that isn't in the records?",
+        status="FIND", minutes="site visit + seller Qs",
+        have=(flag_text + "These don't show up online — they need eyes on the lot and a few "
+              "direct questions to the seller."),
+        do_now="If the lot survived steps 1–4, drive by (or have someone photograph it) and "
+               "ask the seller the questions on the right. Put 'seller delivers all plans, "
+               "surveys, and permits' in the purchase contract.",
+        where="Drive-by + questions to the seller/agent.",
+        ask_verbatim=("Ask the seller: \"Did you have any permit or addition application filed "
+                      "before the fire? Did you take the city's fee waiver? Is there a trailer "
+                      "or temporary-housing agreement on the lot? Has debris been cleared?\""),
+        kills_if="View gets blocked when neighbors rebuild, no legal road access, an unpaid "
+                 "debris lien, or a recorded agreement that transfers to you as the buyer."))
 
     return items
 
 
 def card_to_rows(address: str, items: list) -> list:
-    """Flatten a card into export rows: one row per diligence item, with a blank
-    'Michael's finding' column he fills in and hands back."""
+    """Flatten a card into export rows for the worksheet — one row per step, in order,
+    with a blank column for what Michael finds and a done checkbox."""
     return [dict(
-        Address=address, Priority=it.rank, Question=it.question,
-        Status=it.status, **{"What we know": it.have},
-        **{"Where to get it": it.where}, **{"Kills the deal if": it.kills_if},
-        **{"Michael's finding": ""}, **{"Verified?": ""},
+        Address=address, Step=it.rank, **{"Do this": it.do_now or it.question},
+        **{"Time": it.minutes}, **{"What we already know": it.have},
+        **{"Exactly what to ask / where": (it.ask_verbatim or it.where)},
+        **{"Drop the lot if": it.kills_if},
+        **{"What I found": ""}, **{"Done?": ""},
     ) for it in items]
