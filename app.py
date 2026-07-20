@@ -23,6 +23,7 @@ import jurisdiction as jur
 from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
 from engine import Assumptions, CompMarket, ProForma, sensitivity, what_youd_have_to_believe
+from diligence import build_card, card_to_rows
 
 st.set_page_config(page_title="Lot Analyzer", layout="wide",
                    initial_sidebar_state="expanded")
@@ -174,9 +175,11 @@ for i, r in raw.iterrows():
 
     # money
     signal, roc, why = "—", None, t.reason[:120]
+    matched = None
     if build:
         m = mkt.match(j.code, build, lat if not pd.isna(lat) else None,
                       lon if not pd.isna(lon) else None)
+        matched = m.get("comps")
         if m["basis"]:
             express = (j.code == "MALIBU")
             pf = ProForma(build, float(price) if not pd.isna(price) else 0,
@@ -193,7 +196,19 @@ for i, r in raw.iterrows():
     elif j.code == "CITY_OF_LA":
         signal = "NEED PRIOR SF"; why = "City of LA lot with no prior sqft in county or CSV — add PRIOR_SQFT to price it."
 
+    # lot-specific killers the screener surfaced, for the diligence card's item 5
+    flags = []
+    if p.units and p.units > 1:
+        flags.append(f"Prior {p.units} units — 'same use' + separation rules [Issue 7/8]; "
+                     f"verify unit count and structure separations.")
+    if not p.prior_sqft:
+        flags.append("No prior sqft — establish a baseline before pricing; option, don't buy.")
+
     row.update(Eligible=t.verdict, Buildable=build, Signal=signal, ROC=roc, Why=why)
+    row["_card"] = build_card(
+        address=addr, jurisdiction=j.code, prior_sqft=p.prior_sqft,
+        imp_value=getattr(p, "imp_value", None), is_beachfront=None,
+        units=p.units, matched_comps=matched, lot_flags=flags or None)
     results.append(row)
     prog.progress((i+1)/len(raw))
 
@@ -222,7 +237,38 @@ for _, x in df.iterrows():
         f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
         f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
         unsafe_allow_html=True)
+    # the 30->5 worksheet, per lot, kill-ordered
+    card = x.get("_card")
+    if isinstance(card, list) and card:
+        with st.expander(f"Diligence — what to verify before this makes the short list"):
+            for it in card:
+                badge = {"KNOWN":"✓ known","VERIFY":"~ verify","FIND":"→ find"}.get(it.status, it.status)
+                st.markdown(
+                    f'<div class="card"><b>{it.rank}. {it.question}</b> &nbsp;'
+                    f'<span class="cite">[{badge}]</span><br>'
+                    f'<span class="cite"><b>Have:</b> {it.have}<br>'
+                    f'<b>Get it:</b> {it.where}<br>'
+                    f'<b>Kills it if:</b> {it.kills_if}</span></div>',
+                    unsafe_allow_html=True)
 
-buf = io.StringIO()
-df.to_csv(buf, index=False)
-st.download_button("Download the ranked list", buf.getvalue(), "lot_analysis.csv", "text/csv")
+st.markdown("---")
+c1, c2 = st.columns(2)
+with c1:
+    buf = io.StringIO()
+    df.drop(columns=[c for c in ["_card"] if c in df.columns]).to_csv(buf, index=False)
+    st.download_button("Download the ranked list", buf.getvalue(),
+                       "lot_analysis.csv", "text/csv")
+with c2:
+    # the worksheet: every survivor's card flattened, blank columns for Michael
+    rows = []
+    for _, x in df.iterrows():
+        card = x.get("_card")
+        if isinstance(card, list) and card:
+            rows.extend(card_to_rows(x.Address, card))
+    if rows:
+        wbuf = io.StringIO()
+        pd.DataFrame(rows).to_csv(wbuf, index=False)
+        st.download_button("Download the diligence worksheet", wbuf.getvalue(),
+                           "diligence_worksheet.csv", "text/csv",
+                           help="One row per check, kill-ordered, with blank columns for "
+                                "Michael to fill in and hand back to Tal.")
