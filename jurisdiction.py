@@ -349,18 +349,17 @@ def la_review_note(prior_sqft: Optional[int], year_built: Optional[int],
         ]
     lines += [
         "",
-        "<b>To unlock it — two inputs:</b> prior footprint and story count.",
-        "Per the EO1 guidelines these are established by issued building permits, the "
-        "Certificate of Occupancy, County Assessor records, or Coastal Commission "
-        "documents.",
+        "<b>Want to firm up the storey-add upside?</b> The base above needs nothing — it's "
+        "sourced. The upside is where footprint and storey count matter, and both are cheap "
+        "to get.",
         "",
-        "<b>Story count is usually free and instant:</b> the <b>pre-fire sale listing</b> "
+        "<b>Storeys — free and instant:</b> the <b>pre-fire sale listing</b> "
         "describes the house floor by floor, and burned lots nearly always have one in the "
         "MLS archive. These sites block automated lookups, so the tool can't read them for "
         "you — but here are the direct searches for <b>this</b> address:",
         _listing_links(address),
         "",
-        "<b>Footprint itself needs the record (verified 17 Jul 2026):</b>",
+        "<b>Footprint — from the record (verified 17 Jul 2026):</b>",
         _ladbs_links(address),
         "&bull; <b>Records Research Request</b> (records.ladbs@lacity.org, 5-7 working "
         "days) for permit history.",
