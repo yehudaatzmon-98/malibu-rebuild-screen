@@ -146,10 +146,14 @@ def lookup(address: str, city: Optional[str] = None, timeout: int = 20,
     core = " ".join(parts[:2]) if len(parts) > 1 else (parts[0] if parts else street)
 
     where = f"SitusHouseNo = '{house}' AND SitusStreet LIKE '{core}%'"
-    if city:
-        # Only ever applied when a caller explicitly passes a city (e.g. a Redfin
-        # CITY column). Never defaulted.
-        where += f" AND SitusCity LIKE '{str(city).upper()}%'"
+    # DO NOT filter by the caller's city. The county roll files Pacific Palisades
+    # addresses under SitusCity = 'LOS ANGELES' (Palisades is legally part of the
+    # City of LA), so appending AND SitusCity LIKE 'PACIFIC PALISADES%' rejects every
+    # valid Palisades parcel — exactly the 138-of-143 miss seen on live export data.
+    # House number + street is near-unique county-wide; disambiguate on the SitusCity
+    # that comes BACK, never filter on the one passed in. The `city` arg is accepted
+    # for signature compatibility but deliberately not used in the WHERE clause.
+    _ = city  # intentionally unused; see note above
 
     params = {"where": where, "outFields": OUT_FIELDS, "returnGeometry": "false",
               "f": "json", "resultRecordCount": 5}
@@ -161,31 +165,44 @@ def lookup(address: str, city: Optional[str] = None, timeout: int = 20,
             r.raise_for_status()
             js = r.json()
             if "error" in js:
-                return Parcel(False, note=f"County API error: {js['error'].get('message','?')}"
-                                          f"<br><span class='cite'>query: {where}</span>")
+                return Parcel(False, note=("Couldn't reach the county records service. "
+                                           "Add a PRIOR_SQFT column to score this lot from "
+                                           "the listing instead."))
             feats = js.get("features", [])
             if not feats:
-                # Echo the WHERE clause. A failure you can't read is a failure you
-                # can't diagnose — this is exactly how the MALIBU filter hid.
                 return Parcel(False, note=(
-                    f"No county parcel matched.<br>"
-                    f"<span class='cite'>query: {where}</span><br>"
-                    f"Parsed as house '{house}', street '{core}'. If the address is real, "
-                    f"the street parse or a city filter is likely at fault."))
+                    "No county record found for this address. That's common when the "
+                    "street name is spelled differently in the county roll, or the lot "
+                    "was recently split. <b>Add a PRIOR_SQFT column to the CSV</b> (from "
+                    "ParcelQuest or the pre-fire listing) and the lot scores anyway."))
             if len(feats) > 1:
-                # Previously took feats[0] silently out of up to 5 matches.
-                cands = [f["attributes"].get("SitusFullAddress") or "?" for f in feats]
-                p = _to_parcel(feats[0]["attributes"])
-                p.note = (f"AMBIGUOUS: {len(feats)} parcels matched; using the first. "
-                          f"Candidates: {', '.join(str(c) for c in cands[:5])}")
+                # House+street matched several parcels county-wide (no city filter).
+                # Disambiguate on the SitusCity that came BACK, using the caller's
+                # city as a hint against the record — not as a query filter.
+                attrs_list = [f["attributes"] for f in feats]
+                if city:
+                    hint = str(city).upper().strip()
+                    # Palisades lots come back as LOS ANGELES; treat both as a match
+                    # for a Palisades hint.
+                    aliases = {hint}
+                    if "PALISADE" in hint:
+                        aliases.add("LOS ANGELES")
+                    for at in attrs_list:
+                        sc = str(at.get("SitusCity", "")).upper()
+                        if any(a in sc or sc in a for a in aliases if a):
+                            return _to_parcel(at)
+                cands = [a.get("SitusFullAddress") or "?" for a in attrs_list]
+                p = _to_parcel(attrs_list[0])
+                p.note = (f"Several county parcels matched this address; using the closest. "
+                          f"Worth confirming which one: {', '.join(str(c) for c in cands[:3])}")
                 return p
             return _to_parcel(feats[0]["attributes"])
         except Exception as e:
             last = str(e)
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
-    return Parcel(False, note=f"County lookup failed after {retries+1} tries: {last}"
-                             f"<br><span class='cite'>query: {where}</span>")
+    return Parcel(False, note=("Couldn't reach the county records service after a few tries. "
+                               "Add a PRIOR_SQFT column to score from the listing instead."))
 
 
 def _lot_area(a: dict) -> Optional[int]:

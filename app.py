@@ -193,6 +193,10 @@ results = []
 
 for i, r in raw.iterrows():
     addr = str(r[addr_col])
+    # skip blank rows (Redfin exports sometimes have a trailing empty line)
+    if not addr or addr.strip().lower() in ("nan", "none", ""):
+        prog.progress((i + 1) / len(raw))
+        continue
     city = r.get("CITY")
     price = r.get("PRICE")
     prior = r.get("PRIOR_SQFT")

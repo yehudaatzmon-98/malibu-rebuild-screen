@@ -699,9 +699,12 @@ with tab_batch:
         df = df.sort_values("Verdict", key=lambda s: s.map(order))
 
         n_e = (df.Verdict == "ELIGIBLE").sum()
-        n_r = (df.Verdict == "REVIEW").sum()
-        st.markdown(f"### {n_e} scoreable · {n_r} City of LA (different rulebook) · "
-                    f"{len(df) - n_e - n_r} out")
+        n_s = (df.Verdict == "SCOREABLE").sum()
+        n_out = len(df) - n_e - n_s
+        st.markdown(f"### {n_e + n_s} can be built · {n_out} need more data or don't qualify")
+        st.markdown('<span class="cite">Grouped by eligibility below. For the full '
+                    'money analysis — envelope, comps, return — use the batch analyzer, '
+                    'not this screener tab.</span>', unsafe_allow_html=True)
 
         for v in ["ELIGIBLE", "SCOREABLE", "REVIEW", "UNSCOREABLE", "EXCLUDED"]:
             sub = df[df.Verdict == v]
