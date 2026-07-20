@@ -275,7 +275,7 @@ def _discrepancy(p: Parcel, listing_sqft) -> Optional[str]:
         ls = float(listing_sqft)
     except (TypeError, ValueError):
         return None
-    if ls <= 0:
+    if ls <= 0 or ls != ls:  # ls != ls catches nan (blank sqft on a vacant-lot listing)
         return None
     gap = (ls - p.prior_sqft) / p.prior_sqft
     if abs(gap) <= 0.10:

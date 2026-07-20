@@ -126,10 +126,61 @@ st.markdown('<span class="cite">Redfin search results → Download. Add a PRIOR_
             'column if you have it — it turns the envelope from estimated into sourced.</span>',
             unsafe_allow_html=True)
 
+# first-run: teach, don't dead-end. Offer sample data so results appear in one click.
+use_sample = False
 if up is None:
-    st.stop()
+    st.markdown("---")
+    colA, colB = st.columns([1, 1])
+    with colA:
+        st.markdown("""
+#### How to use this
 
-raw = pd.read_csv(up)
+**1. Get the data.** On Redfin, search the area (e.g. Pacific Palisades or Malibu),
+then on the results page click **Download** (bottom of the list) to save a CSV of
+every listing.
+
+**2. Drop it in** the box above. The tool reads Redfin's standard columns — address,
+price, lot size, coordinates — automatically. You don't type anything per property.
+
+**3. Read the ranked list.** Every lot comes back sorted best-to-worst with a signal
+and the math behind it. Click any lot for the diligence checklist — what to verify
+before it's worth a call.
+
+**Want to see it work first?** Load the sample below — three lots, one of each outcome.
+        """)
+        if st.button("Load sample data →"):
+            use_sample = True
+    with colB:
+        st.markdown("""
+#### What the signals mean
+
+**STRONG / BUY** — the return clears the bar at asking price. Worth a call.
+
+**MAYBE** — marginal. Only worth it if the price moves.
+
+**PASS** — loses money at this price.
+
+**NO COMPS** — a Malibu lot. Buildable, but we have no Malibu sales to price it
+against yet. Envelope shows; the money waits on Malibu comps.
+
+**NEED PRICE / NEED PRIOR SF** — a data gap in that row, not a verdict. The tool
+refuses to guess. Add the missing column and it scores.
+
+<span class="cite">Every number is priced at <b>full asking</b> — the conservative
+floor. Each lot also shows the discount it would need to clear the bar, so you know
+your walk-away number before you call.</span>
+        """, unsafe_allow_html=True)
+    if not use_sample:
+        st.stop()
+
+if up is not None:
+    raw = pd.read_csv(up)
+elif use_sample:
+    raw = pd.read_csv("sample_redfin_export.csv")
+    st.info("Showing sample data — three lots, one of each outcome. "
+            "Upload your own Redfin CSV above to replace it.")
+else:
+    st.stop()
 raw.columns = [c.strip().upper() for c in raw.columns]
 addr_col = next((c for c in raw.columns if "ADDRESS" in c), None)
 if not addr_col:
@@ -152,18 +203,34 @@ for i, r in raw.iterrows():
     is_land = ("land" in ptype or "lot" in ptype or
                (pd.isna(r.get("SQUARE FEET")) and pd.isna(r.get("BEDS"))))
 
+    csv_prior = None
+    if prior is not None and not pd.isna(prior):
+        try:
+            csv_prior = int(float(prior))
+        except (TypeError, ValueError):
+            csv_prior = None
+
     p = county.lookup(addr, None if pd.isna(city) else city)
-    if not p.found and prior and not pd.isna(prior):
-        # fall back to the CSV's prior sqft if county missed
-        p = Parcel(found=True, situs=addr, situs_city=(None if pd.isna(city) else str(city)),
-                   prior_sqft=int(prior), year_built=1960, units=1, use_code="0101")
+
+    # If the CSV supplied PRIOR_SQFT, trust it — the user put it there deliberately,
+    # and it beats a fuzzy county match (or no match at all). Keep the county's other
+    # fields when the lookup succeeded, but the supplied prior sqft wins.
+    if csv_prior:
+        if p.found:
+            p.prior_sqft = csv_prior
+        else:
+            p = Parcel(found=True, situs=addr,
+                       situs_city=(None if pd.isna(city) else str(city)),
+                       prior_sqft=csv_prior, year_built=1960, units=1, use_code="0101")
 
     j = jur.route(p.situs_city if p.found else (None if pd.isna(city) else str(city)))
     row = dict(Address=addr, Jurisdiction=j.name, Price=price)
 
     if not p.found:
         row.update(Eligible="UNSCOREABLE", Buildable=None, Signal="NO DATA",
-                   ROC=None, Why="No county record and no PRIOR_SQFT supplied.")
+                   ROC=None,
+                   Why=("No county match and no PRIOR_SQFT in the CSV. Add a PRIOR_SQFT "
+                        "column (from ParcelQuest or the pre-fire listing) to score this lot."))
         results.append(row); prog.progress((i+1)/len(raw)); continue
 
     t = triage(p)
@@ -251,8 +318,13 @@ df["_t"] = df.Signal.map(lambda s: tier.get(s, 6))
 df = df.sort_values(["_t","ROC"], ascending=[True, False], na_position="last").drop(columns="_t")
 
 n_scored = df.ROC.notna().sum()
-st.markdown(f"### {n_scored} priceable · {len(df)-n_scored} eligible but not priceable")
-st.caption(f"Yardstick: {a.stamp()}")
+st.markdown("---")
+st.markdown(f"### Results — {len(df)} lots, best to worst")
+st.markdown(f'<span class="cite">{n_scored} priceable · {len(df)-n_scored} eligible but '
+            f'not yet priceable (a data gap, not a rejection). Start at the top. Click any '
+            f'lot for its diligence checklist, then download the worksheet to work the phones.'
+            f'</span>', unsafe_allow_html=True)
+st.caption(f"Priced at full asking · yardstick: {a.stamp()}")
 
 for _, x in df.iterrows():
     css = "card"
