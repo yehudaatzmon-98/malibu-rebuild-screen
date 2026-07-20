@@ -22,7 +22,8 @@ import county
 import jurisdiction as jur
 from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
-from engine import Assumptions, CompMarket, ProForma, sensitivity, what_youd_have_to_believe
+from engine import (Assumptions, CompMarket, ProForma, sensitivity,
+                    what_youd_have_to_believe, discount_to_breakeven)
 from diligence import build_card, card_to_rows
 
 st.set_page_config(page_title="Lot Analyzer", layout="wide",
@@ -80,6 +81,16 @@ a = Assumptions(
     new_build_premium=st.sidebar.slider("New-build premium", 0.0, 0.30, 0.10, 0.01),
 )
 st.sidebar.markdown(f'<span class="cite">{a.stamp()}</span>', unsafe_allow_html=True)
+
+st.sidebar.markdown("### Negotiation scenario")
+st.sidebar.caption("Off by default. The ranking above is priced at full asking — the "
+                   "conservative floor. Slide this to see who survives a typical discount, "
+                   "as a scenario, not the default.")
+discount = st.sidebar.slider("Assume % off asking", 0, 30, 0, 1) / 100.0
+if discount > 0:
+    st.sidebar.markdown(f'<span class="cite">Scenario: every lot priced at '
+                        f'<b>{discount:.0%} below ask</b>. This is a what-if, not a '
+                        f'negotiated price.</span>', unsafe_allow_html=True)
 
 # ---- masthead -----------------------------------------------------------------
 st.markdown("""
@@ -176,21 +187,39 @@ for i, r in raw.iterrows():
     # money
     signal, roc, why = "—", None, t.reason[:120]
     matched = None
-    if build:
+    # the asking price is the land cost. A missing or junk price can't be treated
+    # as 0 — that makes land free and floats a fake STRONG BUY to the top of the
+    # batch. Abstain loudly instead.
+    price_ok = (not pd.isna(price)) and float(price) > 1000
+    if build and not price_ok:
+        signal = "NEED PRICE"
+        why = ("No usable asking price in the CSV row. Envelope is "
+               f"{build:,.0f} sf — buildable, but the return needs a land cost. "
+               "Redfin's PRICE column is usually there; check this row.")
+    elif build:
         m = mkt.match(j.code, build, lat if not pd.isna(lat) else None,
                       lon if not pd.isna(lon) else None)
         matched = m.get("comps")
         if m["basis"]:
             express = (j.code == "MALIBU")
-            pf = ProForma(build, float(price) if not pd.isna(price) else 0,
+            # scenario: apply the sidebar discount to the land cost (ask). At 0 it's ask.
+            land = float(price) * (1 - discount)
+            pf = ProForma(build, land,
                           m["basis"], j.code, a, express=express,
                           comp_low=m["low"], comp_high=m["high"])
             rr = pf.run()
             if rr["priceable"]:
                 signal = rr["signal"]; roc = rr["base"]["roc"]
+                # the walk-away number: discount needed to clear 20% ROC, at full ask
+                pf_ask = ProForma(build, float(price), m["basis"], j.code, a,
+                                  express=express, comp_low=m["low"], comp_high=m["high"])
+                dtb = discount_to_breakeven(pf_ask)
+                row["_breakeven"] = dtb.get("verdict", "")
                 up = f" · +storey upside ~{upside:,.0f} sf" if upside else ""
+                scen = f" · scenario −{discount:.0%}" if discount else ""
                 why = (f"{build:,.0f} sf ({build_basis}){up} @ ${m['basis']:,}/sf comp basis "
-                       f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%})")
+                       f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%}){scen}. "
+                       f"{dtb.get('verdict','')}")
         else:
             signal = "NO COMPS"; why = m["note"]
     elif j.code == "CITY_OF_LA":
@@ -208,7 +237,8 @@ for i, r in raw.iterrows():
     row["_card"] = build_card(
         address=addr, jurisdiction=j.code, prior_sqft=p.prior_sqft,
         imp_value=getattr(p, "imp_value", None), is_beachfront=None,
-        units=p.units, matched_comps=matched, lot_flags=flags or None)
+        units=p.units, matched_comps=matched, lot_flags=flags or None,
+        breakeven=row.get("_breakeven"))
     results.append(row)
     prog.progress((i+1)/len(raw))
 
@@ -216,7 +246,7 @@ prog.empty()
 df = pd.DataFrame(results)
 
 # rank: signal tier, then ROC
-tier = {"STRONG":0,"BUY":1,"MAYBE":2,"PASS":3,"NO COMPS":4,"NEED FOOTPRINT":5,"—":6,"NO DATA":7}
+tier = {"STRONG":0,"BUY":1,"MAYBE":2,"PASS":3,"NO COMPS":4,"NEED PRICE":5,"NEED PRIOR SF":6,"—":7,"NO DATA":8}
 df["_t"] = df.Signal.map(lambda s: tier.get(s, 6))
 df = df.sort_values(["_t","ROC"], ascending=[True, False], na_position="last").drop(columns="_t")
 
@@ -228,11 +258,13 @@ for _, x in df.iterrows():
     css = "card"
     if x.Signal == "STRONG": css = "card card-strong"
     elif x.Signal == "PASS": css = "card card-pass"
-    elif x.Signal in ("NO COMPS","NEED FOOTPRINT","NO DATA","—"): css = "card card-none"
+    elif x.Signal in ("NO COMPS","NEED PRICE","NEED PRIOR SF","NO DATA","—"): css = "card card-none"
     bits = [f"{x.Jurisdiction}"]
     if pd.notna(x.Price): bits.append(f"${x.Price:,.0f} ask")
     if pd.notna(x.Buildable): bits.append(f"{x.Buildable:,.0f} sf buildable")
     if pd.notna(x.ROC): bits.append(f"<b>{x.ROC:.0%} ROC</b>")
+    be = x.get("_breakeven")
+    if be: bits.append(f'<b>{be}</b>')
     st.markdown(
         f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
         f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',

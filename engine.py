@@ -240,3 +240,42 @@ def what_youd_have_to_believe(pf: ProForma, target_roc: float = 0.20) -> dict:
     return dict(ok=True, needed_exit_psf=round(needed),
                 comp_basis=round(pf.exit_psf_basis),
                 gap=round((needed / pf.exit_psf_basis - 1) * 100))
+
+
+def discount_to_breakeven(pf: ProForma, target_roc: float = 0.20) -> dict:
+    """
+    The negotiation target, per lot. Instead of ASSUMING a discount off asking, this
+    computes the discount the lot NEEDS to clear a target return — Michael's walk-away
+    number before he calls the agent.
+
+    Holds everything fixed except land cost and searches for the asking-price discount
+    that yields target_roc. A negative "discount" means the lot already clears the
+    target at full asking (it has room to overpay); a discount above ~25% means no
+    realistic negotiation saves it.
+    """
+    if pf.exit_psf_basis is None or not pf.land_cost:
+        return dict(ok=False)
+    ask = pf.land_cost
+    # binary search the land cost that yields target_roc
+    lo, hi = 0.0, ask * 2  # land from free to 2x ask
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        pf2 = ProForma(pf.buildable_sqft, mid, pf.exit_psf_basis, pf.jurisdiction,
+                       pf.a, pf.express)
+        roc = pf2._run_one(pf.exit_psf_basis)["roc"]
+        # higher land -> lower ROC, so if roc too low we need LESS land
+        if roc < target_roc:
+            hi = mid
+        else:
+            lo = mid
+    breakeven_land = (lo + hi) / 2
+    discount_pct = round((1 - breakeven_land / ask) * 100)
+    if discount_pct <= 0:
+        verdict = f"clears {target_roc:.0%} at full asking (room to overpay {abs(discount_pct)}%)"
+    elif discount_pct <= 25:
+        verdict = f"needs {discount_pct}% off asking to clear {target_roc:.0%}"
+    else:
+        verdict = f"needs {discount_pct}% off — outside a realistic negotiation"
+    return dict(ok=True, discount_pct=discount_pct,
+                breakeven_land=round(breakeven_land), ask=round(ask),
+                target_roc=target_roc, verdict=verdict)

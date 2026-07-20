@@ -47,7 +47,7 @@ class DiligenceItem:
 def build_card(*, address: str, jurisdiction: str, prior_sqft: Optional[int],
                imp_value: Optional[int], is_beachfront: Optional[bool],
                units: Optional[int], matched_comps: Optional[list] = None,
-               lot_flags: Optional[list] = None) -> list:
+               lot_flags: Optional[list] = None, breakeven: Optional[str] = None) -> list:
     """
     The per-lot checklist, kill-ordered. Returns a list of DiligenceItem.
 
@@ -126,13 +126,18 @@ def build_card(*, address: str, jurisdiction: str, prior_sqft: Optional[int],
             kills_if="No comparable sales exist — you're guessing at exit."))
 
     # 4 — CAN YOU CONTROL IT? A great lot you can't tie up is worthless.
+    control_have = "Not in any record. The single most important factual gap after the baseline."
+    if breakeven:
+        control_have = (f"<b>Your number before you call: {breakeven}.</b> " + control_have)
     items.append(DiligenceItem(
         rank=4, question="What's the real status — listed, LOI, option, or controlled?",
         status="FIND",
-        have="Not in any record. The single most important factual gap after the baseline.",
+        have=control_have,
         where=("Call the listing agent. Ask: still available, any offers in, will the seller "
-               "do an option or a contingency period."),
-        kills_if="Already under contract, or the seller won't grant time to run diligence."))
+               "do an option or a contingency period. You know your walk-away discount above — "
+               "if the seller won't get near it, move on."),
+        kills_if="Already under contract, or the seller won't grant time — or won't move "
+                 "enough on price to clear the breakeven."))
 
     # 5 — THE UNRECORDED KILLER. Lot-specific flags from the screener go here, plus
     #     the always-ask items.
