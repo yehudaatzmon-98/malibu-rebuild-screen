@@ -325,10 +325,37 @@ n_scored = df.ROC.notna().sum()
 st.markdown("---")
 st.markdown(f"### Results — {len(df)} lots, best to worst")
 st.markdown(f'<span class="cite">{n_scored} priceable · {len(df)-n_scored} eligible but '
-            f'not yet priceable (a data gap, not a rejection). Start at the top. Click any '
-            f'lot for its diligence checklist, then download the worksheet to work the phones.'
-            f'</span>', unsafe_allow_html=True)
+            f'not yet priceable (a data gap, not a rejection).</span>',
+            unsafe_allow_html=True)
 st.caption(f"Priced at full asking · yardstick: {a.stamp()}")
+
+with st.expander("What to do with this list  →  read me first", expanded=True):
+    st.markdown("""
+**The list is sorted by profit — the best opportunities are at the top.** Here's how to
+turn it into a short list of lots worth pursuing:
+
+**Step 1 — Start at the top.** The STRONG and BUY lots clear the return bar at the
+current asking price. Those are the ones worth acting on. MAYBE is marginal; PASS
+loses money — you can ignore those for now.
+
+**Step 2 — Open each top lot's diligence checklist** (click *"Diligence — what to
+verify"* under any lot). It lists the 4–5 things to confirm before the lot is real,
+in order of what's most likely to kill the deal — starting with "is the prior square
+footage real" and ending with "call the agent." Each item says exactly where to get
+the answer.
+
+**Step 3 — Note the walk-away number.** Every lot shows the discount it needs to clear
+the bar (e.g. *"clears 20% at full asking, room to overpay 83%"*). That's the number
+to hold in your head before you call — if the seller won't get near it, move on.
+
+**Step 4 — Download the worksheet** (button at the very bottom). It's the whole short
+list as a checklist, with blank columns to fill in as you make calls and pull records.
+This is the sheet to hand to whoever is doing the legwork.
+
+**Step 5 — Report back.** The lots that survive the checklist — prior sqft confirmed,
+seller willing to deal, no hidden killer — are the ones that go to the partners for a
+real look. That's how ~130 becomes the 5 worth an offer.
+    """)
 
 for _, x in df.iterrows():
     css = "card"
