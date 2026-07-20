@@ -181,8 +181,49 @@ def la_envelope_indicative(prior_sqft: int, storeys: int, factor: float = 1.10):
     )
 
 
+
+def _addr_slug(address: Optional[str]):
+    """URL-encode an address for search links. Returns (query, encoded) or Nones."""
+    if not address:
+        return None, None
+    import urllib.parse
+    q = str(address).strip()
+    return q, urllib.parse.quote_plus(q)
+
+
+def _listing_links(address: Optional[str]) -> str:
+    q, enc = _addr_slug(address)
+    if not enc:
+        return ("&bull; <span class='cite'>Search the address on Redfin, Zillow or Compass "
+                "and read the pre-fire listing copy.</span>")
+    return (f"&bull; <a href='https://www.redfin.com/city/search?q={enc}' target='_blank'>"
+            f"Redfin</a> &nbsp;·&nbsp; "
+            f"<a href='https://www.zillow.com/homes/{enc}_rb/' target='_blank'>Zillow</a> "
+            f"&nbsp;·&nbsp; "
+            f"<a href='https://www.google.com/search?q={enc}+pre-fire+listing+bedrooms+stories' "
+            f"target='_blank'>Google the old listing</a><br>"
+            f"<span class='cite'>The old copy describes the house floor by floor — 'the "
+            f"second level offers...' tells you it's two storeys. Two minutes, no form.</span>")
+
+
+def _ladbs_links(address: Optional[str]) -> str:
+    q, enc = _addr_slug(address)
+    atlas = "https://www.ladbs.org/services/check-status/atlas-permit-search"
+    rebuild = ("https://www.ladbs.org/services/core-services/plan-check-permit/"
+               "plan-check-permit-special-assistance/rebuild-la")
+    line1 = (f"&bull; <b><a href='{atlas}' target='_blank'>LADBS Atlas</a></b> — permit and "
+             f"Certificate of Occupancy records by address. Free, no owner permission. Start "
+             f"here.")
+    line2 = (f"&bull; <b><a href='{rebuild}' target='_blank'>LADBS 'Generate Rebuild "
+             f"Letter'</a></b> — a service built for exactly this question. Free, online.")
+    if enc:
+        line1 += (f" <a href='https://www.google.com/search?q=LADBS+atlas+{enc}' "
+                  f"target='_blank'>(search this address)</a>")
+    return line1 + "<br>" + line2
+
+
 def la_review_note(prior_sqft: Optional[int], year_built: Optional[int],
-                   storeys: Optional[int] = None) -> str:
+                   storeys: Optional[int] = None, address: Optional[str] = None) -> str:
     """
     What the LA branch says instead of an envelope, and why.
 
@@ -244,17 +285,13 @@ def la_review_note(prior_sqft: Optional[int], year_built: Optional[int],
         "documents.",
         "",
         "<b>Story count is usually free and instant:</b> the <b>pre-fire sale listing</b> "
-        "describes the house floor by floor. Burned lots nearly always have one sitting "
-        "in the MLS archive — search the address on Redfin/Zillow/Compass and read the "
-        "old copy. 16767 Bollinger's 2024 listing says it outright: <i>\"The main level "
-        "offers a formal living room... The second level offers a spacious primary "
-        "suite.\"</i> Two storeys, no form, no wait.",
+        "describes the house floor by floor, and burned lots nearly always have one in the "
+        "MLS archive. These sites block automated lookups, so the tool can't read them for "
+        "you — but here are the direct searches for <b>this</b> address:",
+        _listing_links(address),
         "",
         "<b>Footprint itself needs the record (verified 17 Jul 2026):</b>",
-        "&bull; <b>LADBS Atlas</b> — permit and Certificate of Occupancy records by "
-        "address. Free, no owner permission. Start here.",
-        "&bull; <b>LADBS 'Generate Rebuild Letter'</b> — a service built for exactly this "
-        "question. Free, online.",
+        _ladbs_links(address),
         "&bull; <b>Records Research Request</b> (records.ladbs@lacity.org, 5-7 working "
         "days) for permit history.",
         "<span class='cite'>NOTE: actual blueprints require an original release letter "

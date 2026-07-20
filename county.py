@@ -322,7 +322,7 @@ def triage(p: Parcel, listing_sqft=None, listing_price=None, storeys=None) -> Tr
         # published by the Assessor. Name the rule, name the gap, refuse the number.
         # The discrepancy check runs FIRST and runs everywhere — it is the most
         # valuable output the tool has and it is not Malibu-specific.
-        note = jur.la_review_note(p.prior_sqft, p.year_built, storeys)
+        note = jur.la_review_note(p.prior_sqft, p.year_built, storeys, address=p.situs or None)
         d = _discrepancy(p, listing_sqft)
         if d:
             note = f"{d}<br><br>{note}"
