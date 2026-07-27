@@ -119,12 +119,92 @@ def load_comps():
     return pd.read_csv("comps_database.csv")
 
 
-mkt = CompMarket(load_comps())
+# Tal's ask: the comp set has to stay current. The bundled file is pre-fire sales;
+# he wants to add homes selling NOW in nearby non-burned blocks, which are the better
+# read on exit pricing. Upload replaces the bundled set for this session.
+with st.sidebar:
+    st.markdown("### Comps")
+    comps_up = st.file_uploader("Upload an updated comps CSV", type=["csv"],
+                                key="comps_upload",
+                                help="Same columns as the bundled file: address, city, "
+                                     "price, square_feet, price_per_square_foot, sold_date, "
+                                     "latitude, longitude. Replaces the built-in set.")
+if comps_up is not None:
+    comps_df = pd.read_csv(comps_up)
+    comps_sig = f"upload-{len(comps_df)}-{comps_up.name}"
+    st.sidebar.success(f"Using your {len(comps_df)} comps")
+else:
+    comps_df = load_comps()
+    comps_sig = "bundled"
+    st.sidebar.caption(f"Using the bundled {len(comps_df)} sold sales")
+
+mkt = CompMarket(comps_df)
 
 up = st.file_uploader("Redfin CSV", type=["csv"])
 st.markdown('<span class="cite">Redfin search results → Download. Add a PRIOR_SQFT '
             'column if you have it — it turns the envelope from estimated into sourced.</span>',
             unsafe_allow_html=True)
+
+# Tal: "I cannot paste an address and check it right now." One-off lookups shouldn't
+# require building a CSV first.
+with st.expander("Or check a single address"):
+    sa1, sa2, sa3 = st.columns([3, 1, 1])
+    with sa1:
+        one_addr = st.text_input("Address", placeholder="955 Fisk St, Pacific Palisades",
+                                 key="one_addr")
+    with sa2:
+        one_price = st.number_input("Asking price ($)", 0, 100_000_000, 0, 25_000,
+                                    key="one_price")
+    with sa3:
+        one_prior = st.number_input("Prior sqft (optional)", 0, 30_000, 0, 100,
+                                    key="one_prior",
+                                    help="If you know the real prior house size, enter it "
+                                         "— it beats the county record.")
+    if st.button("Check it", key="one_go") and one_addr:
+        p1 = county.lookup(one_addr, None)
+        if one_prior:
+            if p1.found:
+                p1.prior_sqft = int(one_prior)
+            else:
+                p1 = Parcel(found=True, situs=one_addr, situs_city=None,
+                            prior_sqft=int(one_prior), year_built=1960, units=1,
+                            use_code="0101")
+        if not p1.found:
+            st.warning("No county record found for that address. Enter the prior sqft above "
+                       "and try again — that's enough to score it.")
+        else:
+            j1 = jur.route(p1.situs_city)
+            b1 = None
+            if j1.code == "MALIBU" and p1.prior_sqft:
+                ph1, _ = ceiling_from_year(p1.year_built)
+                if ph1:
+                    b1 = envelope_both_cases(p1.prior_sqft, ph1, 10.0)["as_of_right"]["habitable"]
+            elif p1.prior_sqft:
+                b1 = jur.la_envelope_estimate(p1.prior_sqft, lot_sqft=p1.lot_sqft)["base"]
+            if not b1:
+                st.warning(f"{j1.name}: no prior square footage on record. Enter it above to "
+                           f"score this lot.")
+            else:
+                m1 = mkt.match(j1.code, b1, None, None)
+                if not m1.get("basis"):
+                    st.info(f"{j1.name} · {b1:,.0f} sf buildable. {m1['note']}")
+                elif not one_price:
+                    st.info(f"{j1.name} · {b1:,.0f} sf buildable · comps ~${m1['basis']:,}/sf. "
+                            f"Enter an asking price for the return.")
+                else:
+                    pf1 = ProForma(b1, float(one_price), m1["basis"], j1.code, a,
+                                   express=(j1.code == "MALIBU"),
+                                   comp_low=m1["low"], comp_high=m1["high"])
+                    r1 = pf1.run(); bb = r1["base"]
+                    d1 = discount_to_breakeven(pf1)
+                    st.markdown(
+                        f'<div class="card card-strong">{sig_stamp(r1["signal"])} &nbsp; '
+                        f'<b>{one_addr}</b><br><span class="cite">'
+                        f'{j1.name} · ${one_price:,.0f} ask · {b1:,.0f} sf buildable · '
+                        f'<b>{bb["roc"]:.0%} ROC</b> · {d1.get("verdict","")}<br>'
+                        f'total cost ${bb["total_cost"]:,.0f} · net sale '
+                        f'${bb["net_sale"]:,.0f} · profit <b>${bb["profit"]:,.0f}</b>'
+                        f'</span></div>', unsafe_allow_html=True)
 
 # first-run: teach, don't dead-end. Offer sample data so results appear in one click.
 use_sample = False
@@ -187,138 +267,195 @@ if not addr_col:
     st.error("No ADDRESS column. Download the Redfin search results, not a single listing.")
     st.stop()
 
-st.markdown(f"**{len(raw)} listings.** Running the funnel.")
-prog = st.progress(0.0)
-results = []
+# Streamlit re-runs the whole script on every widget click. The batch does one live
+# county lookup per row, so without caching, moving a slider in the per-lot playground
+# would re-run 172 lookups and take a minute. Key the cache on the file contents +
+# comp source so a new upload recomputes but widget clicks don't.
+_sig = f"{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
+if st.session_state.get("_batch_sig") != _sig:
+    st.session_state["_batch_sig"] = _sig
+    st.session_state["_facts"] = None
+    st.session_state.setdefault("_overrides", {})
+    st.session_state.setdefault("_shortlist", set())
 
-for i, r in raw.iterrows():
-    addr = str(r[addr_col])
-    # skip blank rows (Redfin exports sometimes have a trailing empty line)
-    if not addr or addr.strip().lower() in ("nan", "none", ""):
-        prog.progress((i + 1) / len(raw))
-        continue
-    city = r.get("CITY")
-    price = r.get("PRICE")
-    prior = r.get("PRIOR_SQFT")
-    lat, lon = r.get("LATITUDE"), r.get("LONGITUDE")
-    ptype = str(r.get("PROPERTY TYPE", "")).lower()
+# ---------------------------------------------------------------------------
+# PHASE 1 — the expensive part, run ONCE per uploaded file.
+# County lookup, envelope, comp match. None of this depends on the assumption
+# sliders, so it must not re-run when someone moves one. Streamlit re-runs the
+# whole script on every click; without this cache, a slider move would redo 172
+# county lookups and take a minute. Facts in, cached; math applied fresh below.
+# ---------------------------------------------------------------------------
+def _gather_facts(raw, addr_col, mkt):
+    facts = []
+    prog = st.progress(0.0, text="Checking each address against the county record…")
+    n = len(raw)
+    for i, r in raw.iterrows():
+        addr = str(r[addr_col])
+        if not addr or addr.strip().lower() in ("nan", "none", ""):
+            prog.progress(min((i + 1) / n, 1.0)); continue
+        city = r.get("CITY"); price = r.get("PRICE"); prior = r.get("PRIOR_SQFT")
+        lat, lon = r.get("LATITUDE"), r.get("LONGITUDE")
 
-    # classify: skip standing houses / condos, keep vacant/land
-    is_land = ("land" in ptype or "lot" in ptype or
-               (pd.isna(r.get("SQUARE FEET")) and pd.isna(r.get("BEDS"))))
+        csv_prior = None
+        if prior is not None and not pd.isna(prior):
+            try: csv_prior = int(float(prior))
+            except (TypeError, ValueError): csv_prior = None
 
-    csv_prior = None
-    if prior is not None and not pd.isna(prior):
-        try:
-            csv_prior = int(float(prior))
-        except (TypeError, ValueError):
-            csv_prior = None
+        p = county.lookup(addr, None if pd.isna(city) else city)
+        if csv_prior:
+            if p.found:
+                p.prior_sqft = csv_prior
+            else:
+                p = Parcel(found=True, situs=addr,
+                           situs_city=(None if pd.isna(city) else str(city)),
+                           prior_sqft=csv_prior, year_built=1960, units=1, use_code="0101")
 
-    p = county.lookup(addr, None if pd.isna(city) else city)
+        j = jur.route(p.situs_city if p.found else (None if pd.isna(city) else str(city)))
+        f = dict(Address=addr, Jurisdiction=j.name, jcode=j.code,
+                 Price=(float(price) if (price is not None and not pd.isna(price)) else None),
+                 prior_sqft=None, imp_value=None, units=None,
+                 Buildable=None, build_basis="", upside=None,
+                 comp_basis=None, comp_low=None, comp_high=None, comps=None,
+                 express=(j.code == "MALIBU"), status=None, rule_note="", flags=[])
 
-    # If the CSV supplied PRIOR_SQFT, trust it — the user put it there deliberately,
-    # and it beats a fuzzy county match (or no match at all). Keep the county's other
-    # fields when the lookup succeeded, but the supplied prior sqft wins.
-    if csv_prior:
-        if p.found:
-            p.prior_sqft = csv_prior
-        else:
-            p = Parcel(found=True, situs=addr,
-                       situs_city=(None if pd.isna(city) else str(city)),
-                       prior_sqft=csv_prior, year_built=1960, units=1, use_code="0101")
+        if not p.found:
+            f.update(Eligible="UNSCOREABLE", status="NO DATA",
+                     rule_note=("No county match and no PRIOR_SQFT in the CSV. Add a "
+                                "PRIOR_SQFT column (from ParcelQuest or the pre-fire "
+                                "listing) to score this lot."))
+            facts.append(f); prog.progress(min((i + 1) / n, 1.0)); continue
 
-    j = jur.route(p.situs_city if p.found else (None if pd.isna(city) else str(city)))
-    row = dict(Address=addr, Jurisdiction=j.name, Price=price)
+        t = triage(p)
+        f.update(Eligible=t.verdict, prior_sqft=p.prior_sqft,
+                 imp_value=getattr(p, "imp_value", None), units=p.units,
+                 rule_note=t.reason[:120])
 
-    if not p.found:
-        row.update(Eligible="UNSCOREABLE", Buildable=None, Signal="NO DATA",
-                   ROC=None,
-                   Why=("No county match and no PRIOR_SQFT in the CSV. Add a PRIOR_SQFT "
-                        "column (from ParcelQuest or the pre-fire listing) to score this lot."))
-        results.append(row); prog.progress((i+1)/len(raw)); continue
+        build = None; build_basis = ""; upside = None
+        if j.code == "MALIBU" and p.prior_sqft:
+            ph, _ = ceiling_from_year(p.year_built)
+            if ph:
+                build = envelope_both_cases(p.prior_sqft, ph, 10.0)["as_of_right"]["habitable"]
+                build_basis = "as-of-right rebuild"
+        elif j.code == "CITY_OF_LA" and p.prior_sqft:
+            est = jur.la_envelope_estimate(p.prior_sqft, lot_sqft=p.lot_sqft)
+            build = est["base"]; upside = est.get("upside")
+            build_basis = "EO1 base (rebuild same massing)"
+        f.update(Buildable=build, build_basis=build_basis, upside=upside)
 
-    t = triage(p)
-    ent = entitlement_status("NONE")  # batch can't know plans; single-lot view handles APPROVED
+        if build:
+            m = mkt.match(j.code, build, lat if not pd.isna(lat) else None,
+                          lon if not pd.isna(lon) else None)
+            f.update(comps=m.get("comps"), comp_basis=m.get("basis"),
+                     comp_low=m.get("low"), comp_high=m.get("high"))
+            if not m.get("basis"):
+                f["status"] = "NO COMPS"; f["rule_note"] = m["note"]
+            elif not f["Price"]:
+                f["status"] = "NEED PRICE"
+        elif j.code == "CITY_OF_LA":
+            f["status"] = "NEED PRIOR SF"
+            f["rule_note"] = ("City of LA lot with no prior sqft in county or CSV — "
+                              "add PRIOR_SQFT to price it.")
 
-    # buildable envelope
-    build = None
-    build_basis = ""
-    upside = None
-    if j.code == "MALIBU" and p.prior_sqft:
-        ph, _ = ceiling_from_year(p.year_built)
-        if ph:
-            build = envelope_both_cases(p.prior_sqft, ph, 10.0)["as_of_right"]["habitable"]
-            build_basis = "as-of-right rebuild"
-    elif j.code == "CITY_OF_LA" and p.prior_sqft:
-        est = jur.la_envelope_estimate(p.prior_sqft, lot_sqft=p.lot_sqft)
-        build = est["base"]
-        upside = est.get("upside")
-        build_basis = "EO1 base (rebuild same massing)"
+        flags = []
+        if p.units and p.units > 1:
+            flags.append(f"Prior {p.units} units — 'same use' + separation rules "
+                         f"[Issue 7/8]; verify unit count and structure separations.")
+        if not p.prior_sqft:
+            flags.append("No prior sqft — establish a baseline before pricing; option, "
+                         "don't buy.")
+        f["flags"] = flags
+        facts.append(f); prog.progress(min((i + 1) / n, 1.0))
+    prog.empty()
+    return facts
 
-    # money
-    signal, roc, why = "—", None, t.reason[:120]
-    matched = None
-    # the asking price is the land cost. A missing or junk price can't be treated
-    # as 0 — that makes land free and floats a fake STRONG BUY to the top of the
-    # batch. Abstain loudly instead.
-    price_ok = (not pd.isna(price)) and float(price) > 1000
-    if build and not price_ok:
-        signal = "NEED PRICE"
-        why = ("No usable asking price in the CSV row. Envelope is "
-               f"{build:,.0f} sf — buildable, but the return needs a land cost. "
-               "Redfin's PRICE column is usually there; check this row.")
-    elif build:
-        m = mkt.match(j.code, build, lat if not pd.isna(lat) else None,
-                      lon if not pd.isna(lon) else None)
-        matched = m.get("comps")
-        if m["basis"]:
-            express = (j.code == "MALIBU")
-            # scenario: apply the sidebar discount to the land cost (ask). At 0 it's ask.
-            land = float(price) * (1 - discount)
-            pf = ProForma(build, land,
-                          m["basis"], j.code, a, express=express,
-                          comp_low=m["low"], comp_high=m["high"])
-            rr = pf.run()
-            if rr["priceable"]:
-                signal = rr["signal"]; roc = rr["base"]["roc"]
-                # the walk-away number: discount needed to clear 20% ROC, at full ask
-                pf_ask = ProForma(build, float(price), m["basis"], j.code, a,
-                                  express=express, comp_low=m["low"], comp_high=m["high"])
-                dtb = discount_to_breakeven(pf_ask)
-                row["_breakeven"] = dtb.get("verdict", "")
-                up = f" · +storey upside ~{upside:,.0f} sf" if upside else ""
-                scen = f" · scenario −{discount:.0%}" if discount else ""
-                why = (f"{build:,.0f} sf ({build_basis}){up} @ ${m['basis']:,}/sf comp basis "
-                       f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%}){scen}. "
-                       f"{dtb.get('verdict','')}")
-        else:
-            signal = "NO COMPS"; why = m["note"]
-    elif j.code == "CITY_OF_LA":
-        signal = "NEED PRIOR SF"; why = "City of LA lot with no prior sqft in county or CSV — add PRIOR_SQFT to price it."
 
-    # lot-specific killers the screener surfaced, for the diligence card's item 5
-    flags = []
-    if p.units and p.units > 1:
-        flags.append(f"Prior {p.units} units — 'same use' + separation rules [Issue 7/8]; "
-                     f"verify unit count and structure separations.")
-    if not p.prior_sqft:
-        flags.append("No prior sqft — establish a baseline before pricing; option, don't buy.")
+if st.session_state.get("_facts") is None:
+    st.session_state["_facts"] = _gather_facts(raw, addr_col, mkt)
 
-    row.update(Eligible=t.verdict, Buildable=build, Signal=signal, ROC=roc, Why=why)
+facts = st.session_state["_facts"]
+overrides = st.session_state.setdefault("_overrides", {})
+
+# ---------------------------------------------------------------------------
+# PHASE 2 — the cheap part. Applies the current sliders AND any per-lot override
+# to the cached facts. Re-runs instantly on every click, which is what makes the
+# per-lot "what would make this a strong buy" playground usable.
+# ---------------------------------------------------------------------------
+def _score(f, a_, discount_):
+    """Return a display row for one lot under the current assumptions + overrides."""
+    o = overrides.get(f["Address"], {})
+    build = o.get("build") or f["Buildable"]
+    basis = o.get("exit_psf") or f["comp_basis"]
+    ask = f["Price"]
+    # per-lot offer price wins over the global discount scenario
+    if o.get("offer"):
+        land = float(o["offer"])
+    elif ask:
+        land = float(ask) * (1 - discount_)
+    else:
+        land = None
+    a_lot = a_
+    if o.get("constr"):
+        a_lot = Assumptions(**{**a_.__dict__, "construction_psf": float(o["constr"])})
+
+    row = dict(Address=f["Address"], Jurisdiction=f["Jurisdiction"], Price=ask,
+               Buildable=build, Eligible=f.get("Eligible"), ROC=None,
+               Signal=f.get("status") or "—", Why=f.get("rule_note", ""),
+               _f=f, _override=bool(o))
+    # every lot the county found gets a diligence card, priceable or not — a lot that
+    # needs a price or Malibu comps still needs its baseline verified.
+    if f.get("status") != "NO DATA":
+        row["_card"] = build_card(
+            address=f["Address"], jurisdiction=f["jcode"], prior_sqft=f["prior_sqft"],
+            imp_value=f["imp_value"], is_beachfront=None, units=f["units"],
+            matched_comps=f["comps"], lot_flags=f["flags"] or None, breakeven=None)
+
+    if f.get("status") in ("NO DATA", "NO COMPS", "NEED PRIOR SF"):
+        return row
+    if not build or not basis:
+        return row
+    if not land:
+        row["Signal"] = "NEED PRICE"
+        row["Why"] = (f"Envelope is {build:,.0f} sf — buildable, but the return needs a "
+                      f"land cost. Add the price, or set an offer in the what-if below.")
+        return row
+
+    pf = ProForma(build, land, basis, f["jcode"], a_lot, express=f["express"],
+                  comp_low=f["comp_low"], comp_high=f["comp_high"])
+    rr = pf.run()
+    if not rr.get("priceable"):
+        return row
+    row["Signal"] = rr["signal"]; row["ROC"] = rr["base"]["roc"]
+    dtb = discount_to_breakeven(
+        ProForma(build, float(ask), basis, f["jcode"], a_lot, express=f["express"],
+                 comp_low=f["comp_low"], comp_high=f["comp_high"])) if ask else {}
+    row["_breakeven"] = dtb.get("verdict", "")
+    up = f" · +storey upside ~{f['upside']:,.0f} sf" if f.get("upside") else ""
+    scen = ""
+    if o:
+        bits = []
+        if o.get("offer"): bits.append(f"offer ${float(o['offer']):,.0f}")
+        if o.get("constr"): bits.append(f"build ${float(o['constr']):,.0f}/sf")
+        if o.get("build"): bits.append(f"{float(o['build']):,.0f} sf")
+        if o.get("exit_psf"): bits.append(f"exit ${float(o['exit_psf']):,.0f}/sf")
+        scen = f" · YOUR SCENARIO: {', '.join(bits)}"
+    elif discount_:
+        scen = f" · scenario −{discount_:.0%}"
+    row["Why"] = (f"{build:,.0f} sf ({f['build_basis']}){up} @ ${basis:,.0f}/sf comp basis "
+                  f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%}){scen}. "
+                  f"{row['_breakeven']}")
+    # rebuild the card now that we know the walk-away number, so step 4 carries it
     row["_card"] = build_card(
-        address=addr, jurisdiction=j.code, prior_sqft=p.prior_sqft,
-        imp_value=getattr(p, "imp_value", None), is_beachfront=None,
-        units=p.units, matched_comps=matched, lot_flags=flags or None,
+        address=f["Address"], jurisdiction=f["jcode"], prior_sqft=f["prior_sqft"],
+        imp_value=f["imp_value"], is_beachfront=None, units=f["units"],
+        matched_comps=f["comps"], lot_flags=f["flags"] or None,
         breakeven=row.get("_breakeven"))
-    results.append(row)
-    prog.progress((i+1)/len(raw))
+    return row
 
-prog.empty()
-df = pd.DataFrame(results)
 
-# rank: signal tier, then ROC
-tier = {"STRONG":0,"BUY":1,"MAYBE":2,"PASS":3,"NO COMPS":4,"NEED PRICE":5,"NEED PRIOR SF":6,"—":7,"NO DATA":8}
-df["_t"] = df.Signal.map(lambda s: tier.get(s, 6))
+df = pd.DataFrame([_score(f, a, discount) for f in facts])
+tier = {"STRONG":0,"BUY":1,"MAYBE":2,"PASS":3,"NO COMPS":4,"NEED PRICE":5,
+        "NEED PRIOR SF":6,"—":7,"NO DATA":8}
+df["_t"] = df.Signal.map(lambda s: tier.get(s, 7))
 df = df.sort_values(["_t","ROC"], ascending=[True, False], na_position="last").drop(columns="_t")
 
 n_scored = df.ROC.notna().sum()
@@ -357,6 +494,8 @@ seller willing to deal, no hidden killer — are the ones that go to the partner
 real look. That's how ~130 becomes the 5 worth an offer.
     """)
 
+shortlist = st.session_state.setdefault("_shortlist", set())
+
 for _, x in df.iterrows():
     css = "card"
     if x.Signal == "STRONG": css = "card card-strong"
@@ -368,42 +507,144 @@ for _, x in df.iterrows():
     if pd.notna(x.ROC): bits.append(f"<b>{x.ROC:.0%} ROC</b>")
     be = x.get("_breakeven")
     if be: bits.append(f'<b>{be}</b>')
-    st.markdown(
-        f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
-        f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
-        unsafe_allow_html=True)
-    # the 30->5 worksheet, per lot, kill-ordered
-    card = x.get("_card")
-    if isinstance(card, list) and card:
-        with st.expander("How to check this lot — work top to bottom, stop if any step fails"):
-            st.markdown('<span class="cite">Do the steps in order. Each one is cheap to start '
-                        'and the first ones are most likely to kill a bad lot — so a dead lot '
-                        'dies fast, before you spend a phone call on it.</span>',
+
+    # Tal: "I find a property I like. How do I export it? I don't want to write it down."
+    keep_col, card_col = st.columns([1, 22])
+    with keep_col:
+        keep = st.checkbox("★", key=f"keep_{x.Address}",
+                           value=(x.Address in shortlist),
+                           label_visibility="collapsed",
+                           help="Save to your short list")
+    if keep:
+        shortlist.add(x.Address)
+    else:
+        shortlist.discard(x.Address)
+    with card_col:
+        st.markdown(
+            f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
+            f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
+            unsafe_allow_html=True)
+
+        # ---- Tal's main ask: play with THIS lot until it's a strong buy ----
+        f = x.get("_f") or {}
+        if f.get("comp_basis") and f.get("Buildable"):
+            o = overrides.get(x.Address, {})
+            with st.expander("What if… — change this lot's numbers and watch the signal move"):
+                st.markdown('<span class="cite">Everything here affects <b>this lot only</b>. '
+                            'Leave a box at its default to keep the standard assumption. '
+                            'The signal above updates as soon as you change something.</span>',
+                            unsafe_allow_html=True)
+                w1, w2 = st.columns(2)
+                with w1:
+                    offer = st.number_input(
+                        "Your offer price ($)", 0, 100_000_000,
+                        int(o.get("offer") or (f.get("Price") or 0)), 25_000,
+                        key=f"off_{x.Address}",
+                        help="What you'd actually pay. The list prices at full asking; "
+                             "drop this to see what a negotiated price does.")
+                    constr = st.number_input(
+                        "Construction $/sqft", 300, 2500,
+                        int(o.get("constr") or a.construction_psf), 25,
+                        key=f"con_{x.Address}",
+                        help="A simple flat lot with good access builds cheaper than a "
+                             "hillside. Default is the sidebar number.")
+                with w2:
+                    bld = st.number_input(
+                        "Buildable sqft", 0, 30_000,
+                        int(o.get("build") or f.get("Buildable") or 0), 100,
+                        key=f"bld_{x.Address}",
+                        help="Override if you know the real prior house was bigger — "
+                             "e.g. a multi-storey home with a basement the county "
+                             "under-recorded.")
+                    xpsf = st.number_input(
+                        "Exit $/sqft", 0, 12_000,
+                        int(o.get("exit_psf") or f.get("comp_basis") or 0), 50,
+                        key=f"xps_{x.Address}",
+                        help="What the finished home sells for per foot. Default is the "
+                             "matched comp basis; override with your own read.")
+                b1, b2 = st.columns([1, 1])
+                with b1:
+                    if st.button("Apply to this lot", key=f"apply_{x.Address}"):
+                        nd = {}
+                        if offer and offer != (f.get("Price") or 0): nd["offer"] = offer
+                        if constr and constr != a.construction_psf: nd["constr"] = constr
+                        if bld and bld != f.get("Buildable"): nd["build"] = bld
+                        if xpsf and xpsf != f.get("comp_basis"): nd["exit_psf"] = xpsf
+                        if nd: overrides[x.Address] = nd
+                        else: overrides.pop(x.Address, None)
+                        st.rerun()
+                with b2:
+                    if o and st.button("Reset to defaults", key=f"rst_{x.Address}"):
+                        overrides.pop(x.Address, None)
+                        st.rerun()
+                if o:
+                    st.markdown('<span class="cite">★ This lot is running on <b>your</b> '
+                                'numbers, not the defaults. It\'s marked in the export.'
+                                '</span>', unsafe_allow_html=True)
+
+        # the 30->5 worksheet, per lot, kill-ordered
+        card = x.get("_card")
+        if isinstance(card, list) and card:
+            with st.expander("How to check this lot — work top to bottom, stop if any step fails"):
+                st.markdown('<span class="cite">Do the steps in order. Each one is cheap to start '
+                            'and the first ones are most likely to kill a bad lot — so a dead lot '
+                            'dies fast, before you spend a phone call on it.</span>',
+                            unsafe_allow_html=True)
+                for it in card:
+                    mins = f'<span class="cite"> · {it.minutes}</span>' if it.minutes else ""
+                    ask = ""
+                    if it.ask_verbatim:
+                        ask = (f'<div style="margin-top:6px;padding:8px 12px;background:#f2f0ea;'
+                               f'border-left:2px solid var(--ink);"><span class="cite">'
+                               f'<b>Say this:</b> {it.ask_verbatim}</span></div>')
+                    st.markdown(
+                        f'<div class="card">'
+                        f'<b>Step {it.rank}: {it.question}</b>{mins}<br><br>'
+                        f'<b>→ Do this now:</b> {it.do_now or it.where}<br>'
+                        f'{ask}'
+                        f'<span class="cite" style="display:block;margin-top:8px;">'
+                        f'<b>What we already know:</b> {it.have}<br>'
+                        f'{"<b>Where:</b> " + it.where + "<br>" if it.do_now and it.where else ""}'
+                        f'<b style="color:#7a2518;">✕ Drop the lot if:</b> {it.kills_if}'
+                        f'</span></div>',
                         unsafe_allow_html=True)
-            for it in card:
-                mins = f'<span class="cite"> · {it.minutes}</span>' if it.minutes else ""
-                ask = ""
-                if it.ask_verbatim:
-                    ask = (f'<div style="margin-top:6px;padding:8px 12px;background:#f2f0ea;'
-                           f'border-left:2px solid var(--ink);"><span class="cite">'
-                           f'<b>Say this:</b> {it.ask_verbatim}</span></div>')
-                st.markdown(
-                    f'<div class="card">'
-                    f'<b>Step {it.rank}: {it.question}</b>{mins}<br><br>'
-                    f'<b>→ Do this now:</b> {it.do_now or it.where}<br>'
-                    f'{ask}'
-                    f'<span class="cite" style="display:block;margin-top:8px;">'
-                    f'<b>What we already know:</b> {it.have}<br>'
-                    f'{"<b>Where:</b> " + it.where + "<br>" if it.do_now and it.where else ""}'
-                    f'<b style="color:#7a2518;">✕ Drop the lot if:</b> {it.kills_if}'
-                    f'</span></div>',
-                    unsafe_allow_html=True)
 
 st.markdown("---")
+
+# ---- the short list Tal builds by starring lots as he goes ----
+_internal = [c for c in ["_card", "_f", "_override", "_breakeven"] if c in df.columns]
+if shortlist:
+    sl = df[df.Address.isin(shortlist)]
+    st.markdown(f"### ★ Your short list — {len(sl)} lot{'s' if len(sl) != 1 else ''}")
+    st.markdown('<span class="cite">The lots you starred. Download it, or clear and '
+                'start again.</span>', unsafe_allow_html=True)
+    for _, s in sl.iterrows():
+        mark = " ★your numbers" if s.get("_override") else ""
+        roc = f"{s.ROC:.0%} ROC" if pd.notna(s.ROC) else s.Signal
+        ask = f"${s.Price:,.0f}" if pd.notna(s.Price) else "—"
+        st.markdown(f'<div class="card">{sig_stamp(s.Signal)} &nbsp; <b>{s.Address}</b>'
+                    f'<br><span class="cite">{ask} ask · {roc}{mark}</span></div>',
+                    unsafe_allow_html=True)
+    sc1, sc2 = st.columns([1, 1])
+    with sc1:
+        sbuf = io.StringIO()
+        sl.drop(columns=_internal).to_csv(sbuf, index=False)
+        st.download_button("Download my short list", sbuf.getvalue(),
+                           "short_list.csv", "text/csv")
+    with sc2:
+        if st.button("Clear the short list"):
+            st.session_state["_shortlist"] = set()
+            st.rerun()
+    st.markdown("---")
+else:
+    st.markdown('<span class="cite">★ Star any lot above to build a short list you can '
+                'download.</span>', unsafe_allow_html=True)
+    st.markdown("---")
+
 c1, c2 = st.columns(2)
 with c1:
     buf = io.StringIO()
-    df.drop(columns=[c for c in ["_card"] if c in df.columns]).to_csv(buf, index=False)
+    df.drop(columns=_internal).to_csv(buf, index=False)
     st.download_button("Download the ranked list", buf.getvalue(),
                        "lot_analysis.csv", "text/csv")
 with c2:
