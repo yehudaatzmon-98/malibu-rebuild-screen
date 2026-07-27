@@ -184,7 +184,7 @@ with st.expander("Or check a single address"):
         one_price = st.number_input("Asking price ($)", 0, 100_000_000, 0, 25_000,
                                     key="one_price")
     with sa3:
-        one_prior = st.number_input("Prior sqft (optional)", 0, 30_000, 0, 100,
+        one_prior = st.number_input("Prior sqft (optional)", 0, 200_000, 0, 100,
                                     key="one_prior",
                                     help="If you know the real prior house size, enter it "
                                          "— it beats the county record.")
@@ -595,31 +595,39 @@ for _, x in df.iterrows():
                             'Leave a box at its default to keep the standard assumption. '
                             'The signal above updates as soon as you change something.</span>',
                             unsafe_allow_html=True)
+                # Caps must never sit below the value we're seeding the box with, or
+                # Streamlit raises StreamlitValueAboveMaxError and the page dies. Lots
+                # like 860 Via De La Paz carry ~38,000 sf, well past any fixed ceiling,
+                # so derive each max from the lot's own numbers.
+                _v_off = int(o.get("offer") or (f.get("Price") or 0))
+                _v_con = int(o.get("constr") or a.construction_psf)
+                _v_bld = int(o.get("build") or f.get("Buildable") or 0)
+                _v_xps = int(o.get("exit_psf") or f.get("comp_basis") or 0)
                 w1, w2 = st.columns(2)
                 with w1:
                     offer = st.number_input(
-                        "Your offer price ($)", 0, 100_000_000,
-                        int(o.get("offer") or (f.get("Price") or 0)), 25_000,
+                        "Your offer price ($)", 0, max(100_000_000, _v_off * 2),
+                        _v_off, 25_000,
                         key=f"off_{x.Address}",
                         help="What you'd actually pay. The list prices at full asking; "
                              "drop this to see what a negotiated price does.")
                     constr = st.number_input(
-                        "Construction $/sqft", 300, 2500,
-                        int(o.get("constr") or a.construction_psf), 25,
+                        "Construction $/sqft", 0, max(3_000, _v_con * 2),
+                        _v_con, 25,
                         key=f"con_{x.Address}",
                         help="A simple flat lot with good access builds cheaper than a "
                              "hillside. Default is the sidebar number.")
                 with w2:
                     bld = st.number_input(
-                        "Buildable sqft", 0, 30_000,
-                        int(o.get("build") or f.get("Buildable") or 0), 100,
+                        "Buildable sqft", 0, max(60_000, _v_bld * 3),
+                        _v_bld, 100,
                         key=f"bld_{x.Address}",
                         help="Override if you know the real prior house was bigger — "
                              "e.g. a multi-storey home with a basement the county "
                              "under-recorded.")
                     xpsf = st.number_input(
-                        "Exit $/sqft", 0, 12_000,
-                        int(o.get("exit_psf") or f.get("comp_basis") or 0), 50,
+                        "Exit $/sqft", 0, max(15_000, _v_xps * 3),
+                        _v_xps, 50,
                         key=f"xps_{x.Address}",
                         help="What the finished home sells for per foot. Default is the "
                              "matched comp basis; override with your own read.")
