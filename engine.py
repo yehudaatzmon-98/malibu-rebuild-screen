@@ -242,6 +242,141 @@ def what_youd_have_to_believe(pf: ProForma, target_roc: float = 0.20) -> dict:
                 gap=round((needed / pf.exit_psf_basis - 1) * 100))
 
 
+def _roc_with(pf: ProForma, *, land=None, constr=None, build=None, exit_psf=None) -> float:
+    """Re-run the pro forma with one lever changed. Used by the solver below."""
+    a2 = pf.a
+    if constr is not None:
+        a2 = Assumptions(**{**pf.a.__dict__, "construction_psf": float(constr)})
+    pf2 = ProForma(
+        float(build) if build is not None else pf.buildable_sqft,
+        float(land) if land is not None else pf.land_cost,
+        float(exit_psf) if exit_psf is not None else pf.exit_psf_basis,
+        pf.jurisdiction, a2, pf.express)
+    return pf2._run_one(float(exit_psf) if exit_psf is not None else pf.exit_psf_basis)["roc"]
+
+
+def _solve(fn, lo, hi, target, increasing, steps=60):
+    """Binary search a lever for the value that yields target ROC.
+
+    `increasing` says which way ROC moves as the lever rises. Returns None when the
+    target isn't reachable anywhere in [lo, hi] — that matters, because "no offer
+    price makes this work" is a real and useful answer.
+    """
+    f_lo, f_hi = fn(lo), fn(hi)
+    # target must sit between the endpoints, or it isn't reachable in range
+    if increasing:
+        if f_hi < target:
+            return None
+    else:
+        if f_lo < target:
+            return None
+    for _ in range(steps):
+        mid = (lo + hi) / 2
+        v = fn(mid)
+        if (v < target) == increasing:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def path_to_strong(pf: ProForma, target_roc: float = 0.35) -> dict:
+    """
+    "What would it take to make this a STRONG buy?"
+
+    Rather than making someone move sliders until the badge turns green, solve each
+    lever independently: hold everything else at today's numbers and find the single
+    value of that lever which lands exactly on the target return.
+
+    Returns one entry per lever, each with the number needed and how far it is from
+    where things stand. A lever that can't get there in a sane range returns
+    reachable=False — "no realistic offer price saves this lot" is the useful answer
+    in that case, not a fabricated number.
+
+    Levers, and which way they push the return:
+      offer price      — pay less, return rises        (decreasing in land)
+      construction $/sf— build cheaper, return rises   (decreasing in cost)
+      buildable sqft   — more house spreads the land   (usually increasing)
+      exit $/sf        — sell higher, return rises     (increasing)
+    """
+    if pf.exit_psf_basis is None or not pf.land_cost or not pf.buildable_sqft:
+        return dict(ok=False)
+
+    cur = pf._run_one(pf.exit_psf_basis)["roc"]
+    out = dict(ok=True, current_roc=cur, target_roc=target_roc,
+               already=cur >= target_roc, levers=[])
+    if cur >= target_roc:
+        return out
+
+    ask = float(pf.land_cost)
+    cpsf = float(pf.a.construction_psf)
+    bld = float(pf.buildable_sqft)
+    xpsf = float(pf.exit_psf_basis)
+
+    # 1) offer price
+    v = _solve(lambda L: _roc_with(pf, land=L), 1000.0, ask * 1.5, target_roc,
+               increasing=False)
+    if v and v < ask:
+        out["levers"].append(dict(
+            key="offer", label="Pay less for the land",
+            needed=round(v), unit="$", current=round(ask), reachable=True,
+            phrase=(f"offer <b>${v:,.0f}</b> or less "
+                    f"({(1 - v/ask)*100:.0f}% below the ${ask:,.0f} ask)")))
+    else:
+        best = _roc_with(pf, land=1000.0)
+        out["levers"].append(dict(
+            key="offer", label="Pay less for the land", reachable=False,
+            phrase=(f"price alone can't do it — even at a near-zero land cost this "
+                    f"tops out around {best:.0%}")))
+
+    # 2) construction cost
+    v = _solve(lambda C: _roc_with(pf, constr=C), 200.0, cpsf * 2, target_roc,
+               increasing=False)
+    if v and v < cpsf:
+        out["levers"].append(dict(
+            key="constr", label="Build it cheaper",
+            needed=round(v), unit="$/sf", current=round(cpsf), reachable=True,
+            phrase=(f"build at <b>${v:,.0f}/sf</b> or less "
+                    f"(vs ${cpsf:,.0f} assumed)")))
+    else:
+        best = _roc_with(pf, constr=200.0)
+        out["levers"].append(dict(
+            key="constr", label="Build it cheaper", reachable=False,
+            phrase=(f"construction cost alone can't do it — even at $200/sf this tops "
+                    f"out around {best:.0%}")))
+
+    # 3) buildable square footage
+    v = _solve(lambda B: _roc_with(pf, build=B), bld * 0.5, bld * 3, target_roc,
+               increasing=True)
+    if v and v > bld:
+        out["levers"].append(dict(
+            key="build", label="Build bigger",
+            needed=round(v), unit="sf", current=round(bld), reachable=True,
+            phrase=(f"get to <b>{v:,.0f} sf</b> buildable "
+                    f"(vs {bld:,.0f} assumed — check the real prior house)")))
+    else:
+        out["levers"].append(dict(
+            key="build", label="Build bigger", reachable=False,
+            phrase=("more square footage doesn't help here — at this exit price the "
+                    "extra feet cost about what they earn")))
+
+    # 4) exit price
+    v = _solve(lambda X: _roc_with(pf, exit_psf=X), xpsf * 0.5, xpsf * 3, target_roc,
+               increasing=True)
+    if v and v > xpsf:
+        out["levers"].append(dict(
+            key="exit_psf", label="Sell higher",
+            needed=round(v), unit="$/sf", current=round(xpsf), reachable=True,
+            phrase=(f"exit at <b>${v:,.0f}/sf</b> "
+                    f"({(v/xpsf - 1)*100:.0f}% above the ${xpsf:,.0f} comp basis)")))
+    else:
+        out["levers"].append(dict(
+            key="exit_psf", label="Sell higher", reachable=False,
+            phrase="not reachable on exit price alone"))
+
+    return out
+
+
 def discount_to_breakeven(pf: ProForma, target_roc: float = 0.20) -> dict:
     """
     The negotiation target, per lot. Instead of ASSUMING a discount off asking, this

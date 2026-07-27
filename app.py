@@ -23,7 +23,7 @@ import jurisdiction as jur
 from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
 from engine import (Assumptions, CompMarket, ProForma, sensitivity,
-                    what_youd_have_to_believe, discount_to_breakeven)
+                    what_youd_have_to_believe, discount_to_breakeven, path_to_strong)
 from diligence import build_card, card_to_rows
 
 st.set_page_config(page_title="Lot Analyzer", layout="wide",
@@ -447,6 +447,7 @@ def _score(f, a_, discount_):
     if not rr.get("priceable"):
         return row
     row["Signal"] = rr["signal"]; row["ROC"] = rr["base"]["roc"]
+    row["_pf"] = pf
     dtb = discount_to_breakeven(
         ProForma(build, float(ask), basis, f["jcode"], a_lot, express=f["express"],
                  comp_low=f["comp_low"], comp_high=f["comp_high"])) if ask else {}
@@ -547,6 +548,38 @@ for _, x in df.iterrows():
             f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
             unsafe_allow_html=True)
 
+        # ---- "what would make this a STRONG buy?" — solved, not guessed ----
+        pf_row = x.get("_pf")
+        if pf_row is not None and x.Signal in ("BUY", "MAYBE", "PASS"):
+            pts = path_to_strong(pf_row)
+            if pts.get("ok") and not pts.get("already"):
+                reach = [L for L in pts["levers"] if L.get("reachable")]
+                miss = [L for L in pts["levers"] if not L.get("reachable")]
+                head = (f"What would make this a STRONG buy? "
+                        f"(now {pts['current_roc']:.0%}, needs {pts['target_roc']:.0%})")
+                with st.expander(head):
+                    if reach:
+                        st.markdown('<span class="cite">Any <b>one</b> of these on its own '
+                                    'gets you there — everything else held as-is:</span>',
+                                    unsafe_allow_html=True)
+                        for L in reach:
+                            st.markdown(
+                                f'<div class="card"><b>{L["label"]}</b> — '
+                                f'<span class="cite">{L["phrase"]}</span></div>',
+                                unsafe_allow_html=True)
+                        st.markdown('<span class="cite">Combining two gets there with less '
+                                    'of each. Use the <b>What if…</b> panel above to try a '
+                                    'mix and see where it lands.</span>',
+                                    unsafe_allow_html=True)
+                    else:
+                        st.markdown('<span class="cite">No single change gets this to STRONG. '
+                                    'It would take a combination — or the lot just isn\'t '
+                                    'one.</span>', unsafe_allow_html=True)
+                    if miss:
+                        st.markdown('<span class="cite">Won\'t do it alone: ' +
+                                    "; ".join(L["phrase"] for L in miss) + '</span>',
+                                    unsafe_allow_html=True)
+
         # ---- Tal's main ask: play with THIS lot until it's a strong buy ----
         f = x.get("_f") or {}
         if f.get("comp_basis") and f.get("Buildable"):
@@ -634,7 +667,7 @@ for _, x in df.iterrows():
 st.markdown("---")
 
 # ---- the short list Tal builds by starring lots as he goes ----
-_internal = [c for c in ["_card", "_f", "_override", "_breakeven"] if c in df.columns]
+_internal = [c for c in ["_card", "_f", "_override", "_breakeven", "_pf"] if c in df.columns]
 if shortlist:
     sl = df[df.Address.isin(shortlist)]
     st.markdown(f"### ★ Your short list — {len(sl)} lot{'s' if len(sl) != 1 else ''}")
