@@ -69,7 +69,13 @@ def sig_stamp(s):
     return f'<span class="stamp {cls}">{s}</span>'
 
 
-# ---- sidebar: the versioned yardstick -----------------------------------------
+# ---- sidebar ------------------------------------------------------------------
+# Streamlit fills the sidebar in call order, and the short list is only known after
+# the lot loop runs — which would put it below six sliders, off-screen. Reserve a
+# container at the very top now and fill it later, so the basket is the first thing
+# in the sidebar and visible without scrolling anything.
+_sl_slot = st.sidebar.container()
+
 st.sidebar.markdown("### The yardstick")
 st.sidebar.caption("Fixed assumptions. Move one and every lot re-scores together.")
 a = Assumptions(
@@ -711,8 +717,7 @@ def _shortlist_exports(sl):
     return out_rows, srows
 
 
-with st.sidebar:
-    st.markdown("---")
+with _sl_slot:
     if shortlist:
         sl = df[df.Address.isin(shortlist)]
         st.markdown(f"### ★ Short list ({len(sl)})")
@@ -736,6 +741,7 @@ with st.sidebar:
         st.markdown("### ★ Short list (0)")
         st.markdown('<span class="cite">Tick the ★ next to any lot and it collects here. '
                     'Stays visible while you scroll.</span>', unsafe_allow_html=True)
+    st.markdown("---")
 
 st.markdown("---")
 
