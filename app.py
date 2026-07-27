@@ -682,14 +682,63 @@ if shortlist:
                     unsafe_allow_html=True)
     sc1, sc2 = st.columns([1, 1])
     with sc1:
+        # The short list is a handoff document, not a row dump. It has to carry the
+        # numbers Tal was looking at when he starred the lot — including any scenario
+        # he modelled — so it stands on its own in an email to Michael or the partners.
+        out_rows = []
+        for _, s in sl.iterrows():
+            f = s.get("_f") or {}
+            o = overrides.get(s.Address, {})
+            pf_s = s.get("_pf")
+            cost = profit = exit_used = None
+            if pf_s is not None:
+                bb = pf_s.run().get("base") or {}
+                cost = bb.get("total_cost"); profit = bb.get("profit")
+                exit_used = pf_s.exit_psf_basis
+            nxt = ("Verify prior sqft, then call the agent"
+                   if s.Signal in ("STRONG", "BUY")
+                   else "Only if the price moves — see the walk-away number")
+            out_rows.append({
+                "Address": s.Address,
+                "Signal": s.Signal,
+                "Return on cost": f"{s.ROC:.0%}" if pd.notna(s.ROC) else "",
+                "Asking price": f"${s.Price:,.0f}" if pd.notna(s.Price) else "",
+                "Offer modelled": (f"${float(o['offer']):,.0f}" if o.get("offer")
+                                   else "(at full asking)"),
+                "Buildable sqft": f"{s.Buildable:,.0f}" if pd.notna(s.Buildable) else "",
+                "Construction $/sf used": f"${float(o.get('constr') or a.construction_psf):,.0f}",
+                "Exit $/sf used": f"${exit_used:,.0f}" if exit_used else "",
+                "Total cost": f"${cost:,.0f}" if cost else "",
+                "Profit": f"${profit:,.0f}" if profit else "",
+                "Walk-away number": s.get("_breakeven") or "",
+                "Running on my own numbers?": "YES" if o else "no",
+                "Jurisdiction": s.Jurisdiction,
+                "Next step": nxt,
+            })
         sbuf = io.StringIO()
-        sl.drop(columns=_internal).to_csv(sbuf, index=False)
+        pd.DataFrame(out_rows).to_csv(sbuf, index=False)
         st.download_button("Download my short list", sbuf.getvalue(),
-                           "short_list.csv", "text/csv")
+                           "short_list.csv", "text/csv",
+                           help="Address, signal, return, your modelled offer, the cost "
+                                "stack, the walk-away number and the next step — one row "
+                                "per lot, ready to send on.")
     with sc2:
-        if st.button("Clear the short list"):
-            st.session_state["_shortlist"] = set()
-            st.rerun()
+        # the same starred lots, but as the diligence checklist to work through
+        srows = []
+        for _, s in sl.iterrows():
+            card = s.get("_card")
+            if isinstance(card, list) and card:
+                srows.extend(card_to_rows(s.Address, card))
+        if srows:
+            swbuf = io.StringIO()
+            pd.DataFrame(srows).to_csv(swbuf, index=False)
+            st.download_button("Download the checklist for these lots", swbuf.getvalue(),
+                               "short_list_diligence.csv", "text/csv",
+                               help="Just the starred lots, as the step-by-step checklist "
+                                    "with blank columns to fill in.")
+    if st.button("Clear the short list"):
+        st.session_state["_shortlist"] = set()
+        st.rerun()
     st.markdown("---")
 else:
     st.markdown('<span class="cite">★ Star any lot above to build a short list you can '
