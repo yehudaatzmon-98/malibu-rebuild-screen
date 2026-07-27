@@ -146,7 +146,36 @@ _COMP_ALIASES = {
     "year_built": ["year_built", "year built", "yr built"],
     "neighborhood_or_location": ["neighborhood_or_location", "neighborhood", "location",
                                  "area", "subdivision"],
+    "area_flag": ["area_flag", "area flag", "in palisades", "burn area"],
 }
+
+
+def palisades_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only Pacific Palisades sales.
+
+    The fund's exit is a Palisades house, so the exit basis should be built from
+    Palisades trades. Santa Monica and wider-LA sales are a different market and
+    drag the basis in whichever direction that market happens to sit — the same
+    never-blend rule already enforced between Malibu and Palisades.
+
+    Prefers an explicit area flag when the source provides one (Tal's export marks
+    each sale 'Pacific Palisades' or 'Outside Palisades'); otherwise falls back to
+    the city field.
+    """
+    if "area_flag" in df.columns and df["area_flag"].notna().any():
+        flag = df["area_flag"].astype(str).str.strip().str.lower()
+        keep = flag.eq("pacific palisades")
+        # rows with no flag fall through to the city test
+        unflagged = ~flag.isin(["pacific palisades", "outside palisades"])
+        if "city" in df.columns:
+            city_ok = df["city"].astype(str).str.strip().str.lower().str.startswith(
+                ("pacific palisades", "pacific plsds"))
+            keep = keep | (unflagged & city_ok)
+        return df[keep]
+    if "city" in df.columns:
+        city = df["city"].astype(str).str.strip().str.lower()
+        return df[city.str.startswith(("pacific palisades", "pacific plsds"))]
+    return df
 
 
 def normalize_comps(df: pd.DataFrame):
@@ -208,6 +237,10 @@ with st.sidebar:
                           index=0, key="comps_mode",
                           help="Add is almost always right — more recent sales make the "
                                "exit estimate better.")
+    pal_only = st.checkbox("Pacific Palisades sales only", value=True, key="pal_only",
+                           help="The exit is a Palisades house, so price it off Palisades "
+                                "trades. Unticking pulls in Santa Monica and wider-LA "
+                                "sales, which are a different market.")
 
 base_comps = load_comps()
 if comps_up is not None:
@@ -239,6 +272,11 @@ else:
     comps_df = base_comps
     comps_sig = "bundled"
     st.sidebar.caption(f"Using the bundled {len(base_comps):,} sold sales")
+
+if pal_only:
+    _before_f = len(comps_df)
+    comps_df = palisades_only(comps_df)
+    st.sidebar.caption(f"Palisades only: {len(comps_df):,} of {_before_f:,} sales in play")
 
 mkt = CompMarket(comps_df)
 
