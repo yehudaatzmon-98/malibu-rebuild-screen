@@ -119,24 +119,46 @@ def load_comps():
     return pd.read_csv("comps_database.csv")
 
 
-# Tal's ask: the comp set has to stay current. The bundled file is pre-fire sales;
-# he wants to add homes selling NOW in nearby non-burned blocks, which are the better
-# read on exit pricing. Upload replaces the bundled set for this session.
+# Tal's ask: the comp set has to stay current. The bundled file is pre-fire sales; he
+# wants to ADD homes selling NOW in nearby non-burned blocks, which are the better read
+# on exit pricing. So uploads MERGE by default — replacing would throw away the 263
+# sold comps already collected. Dedupe on address + sold date so re-uploading a file
+# that overlaps doesn't double-count a sale.
 with st.sidebar:
     st.markdown("### Comps")
-    comps_up = st.file_uploader("Upload an updated comps CSV", type=["csv"],
+    comps_up = st.file_uploader("Add more comps (CSV)", type=["csv"],
                                 key="comps_upload",
                                 help="Same columns as the bundled file: address, city, "
                                      "price, square_feet, price_per_square_foot, sold_date, "
-                                     "latitude, longitude. Replaces the built-in set.")
+                                     "latitude, longitude.")
+    comps_mode = st.radio("How to use them", ["Add to the existing comps", "Replace them"],
+                          index=0, key="comps_mode",
+                          help="Add is almost always right — more recent sales make the "
+                               "exit estimate better. Replace only if the bundled set is wrong.")
+
+base_comps = load_comps()
 if comps_up is not None:
-    comps_df = pd.read_csv(comps_up)
-    comps_sig = f"upload-{len(comps_df)}-{comps_up.name}"
-    st.sidebar.success(f"Using your {len(comps_df)} comps")
+    new_comps = pd.read_csv(comps_up)
+    if comps_mode.startswith("Add"):
+        before = len(base_comps)
+        comps_df = pd.concat([base_comps, new_comps], ignore_index=True)
+        # dedupe: same address + same sold date is the same sale
+        key_cols = [c for c in ["address", "sold_date"] if c in comps_df.columns]
+        if key_cols:
+            comps_df = comps_df.drop_duplicates(subset=key_cols, keep="last")
+        added = len(comps_df) - before
+        comps_sig = f"merge-{len(comps_df)}-{comps_up.name}"
+        st.sidebar.success(f"{len(comps_df):,} comps in play — "
+                           f"{added:,} new added to the original {before:,}")
+    else:
+        comps_df = new_comps
+        comps_sig = f"replace-{len(comps_df)}-{comps_up.name}"
+        st.sidebar.warning(f"Using only your {len(comps_df):,} comps — the bundled "
+                           f"{len(base_comps):,} are set aside")
 else:
-    comps_df = load_comps()
+    comps_df = base_comps
     comps_sig = "bundled"
-    st.sidebar.caption(f"Using the bundled {len(comps_df)} sold sales")
+    st.sidebar.caption(f"Using the bundled {len(base_comps):,} sold sales")
 
 mkt = CompMarket(comps_df)
 
