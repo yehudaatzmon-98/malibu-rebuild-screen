@@ -125,42 +125,116 @@ def load_comps():
     return pd.read_csv("comps_database.csv")
 
 
-# Tal's ask: the comp set has to stay current. The bundled file is pre-fire sales; he
-# wants to ADD homes selling NOW in nearby non-burned blocks, which are the better read
-# on exit pricing. So uploads MERGE by default — replacing would throw away the 263
-# sold comps already collected. Dedupe on address + sold date so re-uploading a file
-# that overlaps doesn't double-count a sale.
+# Uploaded comps rarely arrive with our exact column names — a Redfin sold export uses
+# ADDRESS / SOLD DATE / PRICE / SQUARE FEET / $/SQUARE FEET. Map whatever comes in onto
+# the schema the matcher needs, or the rows land with every field blank and are silently
+# useless. Worse, blank address+sold_date made pandas treat every uploaded row as a
+# duplicate of every other, collapsing a whole file into a single comp.
+_COMP_ALIASES = {
+    "address": ["address", "addr", "street address", "full address", "property address"],
+    "city": ["city", "town", "municipality"],
+    "price": ["price", "sold price", "sale price", "last sold price", "close price",
+              "sold_price", "sale_price"],
+    "square_feet": ["square_feet", "square feet", "sq ft", "sqft", "sq.ft.", "living area",
+                    "finished sqft", "total sqft", "building sqft"],
+    "price_per_square_foot": ["price_per_square_foot", "$/square feet", "$/sq ft", "$/sqft",
+                              "price per square foot", "price/sqft", "ppsf", "$ per sqft"],
+    "sold_date": ["sold_date", "sold date", "sale date", "close date", "date sold",
+                  "last sold date", "sold on"],
+    "latitude": ["latitude", "lat"],
+    "longitude": ["longitude", "lng", "lon", "long"],
+    "year_built": ["year_built", "year built", "yr built"],
+    "neighborhood_or_location": ["neighborhood_or_location", "neighborhood", "location",
+                                 "area", "subdivision"],
+}
+
+
+def normalize_comps(df: pd.DataFrame):
+    """Map an arbitrary comps CSV onto our schema. Returns (df, notes)."""
+    notes = []
+    lookup = {str(c).strip().lower(): c for c in df.columns}
+    out = pd.DataFrame(index=df.index)
+    for canon, aliases in _COMP_ALIASES.items():
+        src = next((lookup[al] for al in aliases if al in lookup), None)
+        if src is not None:
+            out[canon] = df[src]
+    # strip currency/commas so "$3,750,000" and "1,234" parse as numbers
+    for col in ("price", "square_feet", "price_per_square_foot", "latitude",
+                "longitude", "year_built"):
+        if col in out.columns:
+            out[col] = pd.to_numeric(
+                out[col].astype(str).str.replace(r"[^0-9.\-]", "", regex=True),
+                errors="coerce")
+    # derive $/sqft per row wherever it's missing but price and size are present —
+    # a blank cell shouldn't cost us an otherwise good comp
+    if "price" in out.columns and "square_feet" in out.columns:
+        if "price_per_square_foot" not in out.columns:
+            out["price_per_square_foot"] = pd.NA
+        derivable = (out["price_per_square_foot"].isna() & out["price"].notna()
+                     & out["square_feet"].notna() & (out["square_feet"] > 0))
+        n_derived = int(derivable.sum())
+        if n_derived:
+            out.loc[derivable, "price_per_square_foot"] = (
+                out.loc[derivable, "price"] / out.loc[derivable, "square_feet"]).round(0)
+            notes.append(f"derived $/sqft for {n_derived} row(s) from price ÷ size")
+    if "sold_date" in out.columns:
+        out["sold_date"] = pd.to_datetime(out["sold_date"], errors="coerce")
+    # the matcher needs size and $/sqft; anything without both can't be scored
+    before = len(out)
+    need = [c for c in ("square_feet", "price_per_square_foot") if c in out.columns]
+    if len(need) == 2:
+        out = out[out.square_feet.notna() & (out.square_feet > 0) &
+                  out.price_per_square_foot.notna() & (out.price_per_square_foot > 0)]
+    dropped = before - len(out)
+    if dropped:
+        notes.append(f"{dropped} row(s) skipped — missing size or $/sqft")
+    missing = [c for c in ("address", "city", "square_feet", "price_per_square_foot")
+               if c not in out.columns]
+    if missing:
+        notes.append("columns not found: " + ", ".join(missing))
+    if "latitude" not in out.columns or "longitude" not in out.columns:
+        notes.append("no coordinates — these comps won't be distance-weighted")
+    return out.reset_index(drop=True), notes
+
+
 with st.sidebar:
     st.markdown("### Comps")
     comps_up = st.file_uploader("Add more comps (CSV)", type=["csv"],
                                 key="comps_upload",
-                                help="Same columns as the bundled file: address, city, "
-                                     "price, square_feet, price_per_square_foot, sold_date, "
-                                     "latitude, longitude.")
+                                help="Any column names work — Redfin's sold export is "
+                                     "fine. Needs at least an address, the size, and "
+                                     "either $/sqft or the price.")
     comps_mode = st.radio("How to use them", ["Add to the existing comps", "Replace them"],
                           index=0, key="comps_mode",
                           help="Add is almost always right — more recent sales make the "
-                               "exit estimate better. Replace only if the bundled set is wrong.")
+                               "exit estimate better.")
 
 base_comps = load_comps()
 if comps_up is not None:
-    new_comps = pd.read_csv(comps_up)
+    raw_new = pd.read_csv(comps_up)
+    new_comps, notes = normalize_comps(raw_new)
     if comps_mode.startswith("Add"):
         before = len(base_comps)
         comps_df = pd.concat([base_comps, new_comps], ignore_index=True)
-        # dedupe: same address + same sold date is the same sale
-        key_cols = [c for c in ["address", "sold_date"] if c in comps_df.columns]
-        if key_cols:
-            comps_df = comps_df.drop_duplicates(subset=key_cols, keep="last")
+        # Dedupe ONLY where both keys are present. Rows with a blank address or date
+        # are not duplicates of each other — that assumption is what collapsed an
+        # entire uploaded file down to one comp.
+        if {"address", "sold_date"}.issubset(comps_df.columns):
+            keyed = comps_df.dropna(subset=["address", "sold_date"])
+            unkeyed = comps_df[~comps_df.index.isin(keyed.index)]
+            keyed = keyed.drop_duplicates(subset=["address", "sold_date"], keep="last")
+            comps_df = pd.concat([keyed, unkeyed], ignore_index=True)
         added = len(comps_df) - before
         comps_sig = f"merge-{len(comps_df)}-{comps_up.name}"
-        st.sidebar.success(f"{len(comps_df):,} comps in play — "
-                           f"{added:,} new added to the original {before:,}")
+        st.sidebar.success(f"{len(comps_df):,} comps in play — {added:,} added to the "
+                           f"original {before:,}")
+        st.sidebar.caption(f"Read {len(raw_new):,} row(s) from your file.")
     else:
         comps_df = new_comps
         comps_sig = f"replace-{len(comps_df)}-{comps_up.name}"
-        st.sidebar.warning(f"Using only your {len(comps_df):,} comps — the bundled "
-                           f"{len(base_comps):,} are set aside")
+        st.sidebar.warning(f"Using only your {len(comps_df):,} comps")
+    for n in notes:
+        st.sidebar.caption(f"· {n}")
 else:
     comps_df = base_comps
     comps_sig = "bundled"
