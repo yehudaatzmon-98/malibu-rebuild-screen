@@ -85,8 +85,19 @@ a = Assumptions(
     selling_cost_pct=st.sidebar.slider("Selling cost", 0.0, 0.10, 0.05, 0.005),
     appreciation_pct=st.sidebar.slider("Appreciation /yr", -0.05, 0.10, 0.03, 0.005),
     new_build_premium=st.sidebar.slider("New-build premium", 0.0, 0.30, 0.10, 0.01),
+    scarcity_premium=st.sidebar.slider(
+        "SCARCITY BET — extra exit premium", 0.0, 0.40, 0.00, 0.05,
+        help="The 2028-29 thesis: a rebuilt, supply-constrained Palisades sells above "
+             "what today's comps imply. Zero by default because it is a forecast, not "
+             "an observation — Palisades sales through mid-2026 are roughly flat "
+             "(~+1.5%/yr size-controlled), below the 3% appreciation already assumed. "
+             "Turn it on to see the upside case; it stays labelled as a bet."),
 )
 st.sidebar.markdown(f'<span class="cite">{a.stamp()}</span>', unsafe_allow_html=True)
+if a.scarcity_premium:
+    st.sidebar.warning(f"Scarcity bet ON (+{a.scarcity_premium:.0%}). Every number below "
+                       f"includes a forecast the current data does not yet support. "
+                       f"Base case is this slider at 0.")
 
 st.sidebar.markdown("### Negotiation scenario")
 st.sidebar.caption("Off by default. The ranking above is priced at full asking — the "
@@ -606,6 +617,12 @@ st.markdown(f'<span class="cite">{n_scored} priceable · {len(df)-n_scored} elig
             f'not yet priceable (a data gap, not a rejection).</span>',
             unsafe_allow_html=True)
 st.caption(f"Priced at full asking · yardstick: {a.stamp()}")
+if a.scarcity_premium:
+    st.error(f"**Upside case, not the base case.** Every return below includes a "
+             f"+{a.scarcity_premium:.0%} scarcity premium on the exit price — the "
+             f"2028-29 supply-constraint thesis. Palisades sales through mid-2026 are "
+             f"roughly flat, so this is an argument to be made, not a measurement. "
+             f"Set the slider to 0 for the defensible base case.")
 
 with st.expander("What to do with this list  →  read me first", expanded=True):
     st.markdown("""

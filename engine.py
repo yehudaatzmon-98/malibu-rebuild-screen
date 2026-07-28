@@ -46,15 +46,31 @@ class Assumptions:
     selling_cost_pct: float = 0.05        # broker + closing on the sale
     appreciation_pct: float = 0.03        # forward escalation — biggest unknown, kept modest
     new_build_premium: float = 0.10       # brand-new over the resale comps
+    # THE SCARCITY BET — deliberately zero in the base case.
+    #
+    # The thesis is that by 2028-29 a rebuilt Palisades is supply-constrained and a
+    # finished house commands more than today's comps imply. That may well be true.
+    # It is also, today, a forecast rather than an observation: Palisades sales
+    # through mid-2026 show roughly flat pricing (~+1.5%/yr on size-controlled
+    # medians), which is BELOW the 3% appreciation already assumed.
+    #
+    # So it lives here, separately, at zero. The base case contains only what the
+    # data supports. Turn it on to see the upside case, and it stays labelled as a
+    # bet everywhere it shows up — an LP can argue with the bet without the
+    # measured part being contaminated by it.
+    scarcity_premium: float = 0.00
     hold_years_express: float = 1.5       # like-for-like / express permit
     hold_years_standard: float = 3.0      # CDP / standard track
-    version: str = "v1.0"
+    version: str = "v1.1"
 
     def stamp(self) -> str:
-        return (f"{self.version} · ${self.construction_psf:,.0f}/sf · "
-                f"cont {self.contingency_pct:.0%} · carry {self.carrying_rate:.0%} · "
-                f"sell {self.selling_cost_pct:.0%} · appr {self.appreciation_pct:.0%} · "
-                f"premium {self.new_build_premium:.0%}")
+        s = (f"{self.version} · ${self.construction_psf:,.0f}/sf · "
+             f"cont {self.contingency_pct:.0%} · carry {self.carrying_rate:.0%} · "
+             f"sell {self.selling_cost_pct:.0%} · appr {self.appreciation_pct:.0%} · "
+             f"premium {self.new_build_premium:.0%}")
+        if self.scarcity_premium:
+            s += f" · SCARCITY BET +{self.scarcity_premium:.0%}"
+        return s
 
 
 # ------------------------------------------------------------------ comp market
@@ -167,12 +183,18 @@ class ProForma:
         # exit: comp basis, escalated forward, plus new-build premium
         escalated = exit_psf * ((1 + self.a.appreciation_pct) ** hold)
         premium = escalated * (1 + self.a.new_build_premium)
+        # the scarcity bet is applied LAST and tracked separately, so the measured
+        # part of the exit price is always recoverable from the output
+        premium_measured = premium
+        premium = premium * (1 + self.a.scarcity_premium)
         gross_sale = premium * self.buildable_sqft
         net_sale = gross_sale * (1 - self.a.selling_cost_pct)
         profit = net_sale - total_cost
         roc = profit / total_cost if total_cost else 0
         return dict(
             exit_psf=round(exit_psf), effective_psf=round(premium),
+            effective_psf_measured=round(premium_measured),
+            scarcity_applied=self.a.scarcity_premium,
             construction=round(construction), contingency=round(contingency),
             carry=round(carry), total_cost=round(total_cost),
             gross_sale=round(gross_sale), net_sale=round(net_sale),
