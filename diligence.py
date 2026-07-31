@@ -50,7 +50,8 @@ class DiligenceItem:
 def build_card(*, address: str, jurisdiction: str, prior_sqft: Optional[int],
                imp_value: Optional[int], is_beachfront: Optional[bool],
                units: Optional[int], matched_comps: Optional[list] = None,
-               lot_flags: Optional[list] = None, breakeven: Optional[str] = None) -> list:
+               lot_flags: Optional[list] = None, breakeven: Optional[str] = None,
+               coastal_tier: Optional[str] = None) -> list:
     """
     The per-lot checklist, kill-ordered. Returns a list of DiligenceItem.
 
@@ -102,6 +103,30 @@ def build_card(*, address: str, jurisdiction: str, prior_sqft: Optional[int],
                          "can be forced to give the public a permanent walkway across the lot. "
                          "That scares off your eventual buyer.",
                 ask_verbatim=""))
+
+    # 2b — COASTAL COMMISSION (Palisades). Only fires where it's plausible, because a
+    # blanket "check the coastal zone" on every inland lot is noise Michael will learn
+    # to skip.
+    if jurisdiction != "MALIBU" and coastal_tier in ("HIGH", "LIKELY", "UNKNOWN"):
+        urgent = coastal_tier == "HIGH"
+        items.append(DiligenceItem(
+            rank=2, question="Is this lot in the Coastal Zone?",
+            status="FIND",
+            minutes="2 min, online",
+            have=("Close to the shore — coastal jurisdiction is likely." if urgent else
+                  "Near enough that the Coastal Zone is plausible. The City of LA has no "
+                  "fully certified Local Coastal Program for Pacific Palisades, so some "
+                  "parcels need the Coastal Commission directly, not just City approval."),
+            do_now=("Search the address on ZIMAS (zimas.lacity.org) and read the Coastal "
+                    "Zone and Coastal Jurisdiction fields. If it shows dual permit or "
+                    "Commission jurisdiction, call the Coastal Commission South Coast "
+                    "District before going further."),
+            where="ZIMAS: https://zimas.lacity.org/  ·  Coastal Commission South Coast District",
+            kills_if=("The lot needs a Coastal Development Permit from the Commission and "
+                      "the plan exceeds the rebuild envelope. A like-for-like rebuild is "
+                      "largely insulated by the emergency orders; going bigger is not, and "
+                      "a CDP typically runs over a year."),
+            ask_verbatim=""))
 
     # 3 — DO THE COMPS HOLD UP? The exit price is the whole return.
     if matched_comps:

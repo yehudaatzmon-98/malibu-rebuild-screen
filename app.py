@@ -25,6 +25,7 @@ from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
 from engine import (Assumptions, CompMarket, ProForma, sensitivity,
                     what_youd_have_to_believe, discount_to_breakeven, path_to_strong)
 from diligence import build_card, card_to_rows
+from coastal import coastal_flag
 
 st.set_page_config(page_title="Lot Analyzer", layout="wide",
                    initial_sidebar_state="expanded")
@@ -78,7 +79,10 @@ _sl_slot = st.sidebar.container()
 
 st.sidebar.markdown("### The yardstick")
 st.sidebar.caption("Fixed assumptions. Move one and every lot re-scores together.")
-a = Assumptions(
+# Build the yardstick. Guard against a stale engine.py: if only one of the two files
+# has been updated, an unknown keyword would otherwise kill the whole app before it
+# renders anything. Better to run with the feature disabled and say so.
+_assump_kwargs = dict(
     construction_psf=st.sidebar.number_input("Construction $/sqft (fully loaded)", 400, 2000, 1000, 50),
     contingency_pct=st.sidebar.slider("Contingency", 0.0, 0.20, 0.08, 0.01),
     carrying_rate=st.sidebar.slider("Carrying rate /yr", 0.0, 0.10, 0.03, 0.005),
@@ -93,8 +97,17 @@ a = Assumptions(
              "(~+1.5%/yr size-controlled), below the 3% appreciation already assumed. "
              "Turn it on to see the upside case; it stays labelled as a bet."),
 )
+try:
+    a = Assumptions(**_assump_kwargs)
+except TypeError:
+    _supported = set(getattr(Assumptions, "__dataclass_fields__", {}))
+    _dropped = [k for k in _assump_kwargs if k not in _supported]
+    a = Assumptions(**{k: v for k, v in _assump_kwargs.items() if k in _supported})
+    st.sidebar.error(
+        "**engine.py is out of date.** Ignoring: " + ", ".join(_dropped) +
+        ". Update engine.py in the repo (and reboot the app from Manage app) to enable it.")
 st.sidebar.markdown(f'<span class="cite">{a.stamp()}</span>', unsafe_allow_html=True)
-if a.scarcity_premium:
+if getattr(a, "scarcity_premium", 0):
     st.sidebar.warning(f"Scarcity bet ON (+{a.scarcity_premium:.0%}). Every number below "
                        f"includes a forecast the current data does not yet support. "
                        f"Base case is this slider at 0.")
@@ -463,6 +476,8 @@ def _gather_facts(raw, addr_col, mkt):
 
         j = jur.route(p.situs_city if p.found else (None if pd.isna(city) else str(city)))
         f = dict(Address=addr, Jurisdiction=j.name, jcode=j.code,
+                 lat=(None if pd.isna(lat) else float(lat)),
+                 lon=(None if pd.isna(lon) else float(lon)),
                  Price=(float(price) if (price is not None and not pd.isna(price)) else None),
                  prior_sqft=None, imp_value=None, units=None,
                  Buildable=None, build_basis="", upside=None,
@@ -558,7 +573,9 @@ def _score(f, a_, discount_):
         row["_card"] = build_card(
             address=f["Address"], jurisdiction=f["jcode"], prior_sqft=f["prior_sqft"],
             imp_value=f["imp_value"], is_beachfront=None, units=f["units"],
-            matched_comps=f["comps"], lot_flags=f["flags"] or None, breakeven=None)
+            matched_comps=f["comps"], lot_flags=f["flags"] or None, breakeven=None,
+            coastal_tier=(coastal_flag(f.get("jcode"), f.get("lat"), f.get("lon"),
+                                       f["Address"]) or {}).get("tier"))
 
     if f.get("status") in ("NO DATA", "NO COMPS", "NEED PRIOR SF"):
         return row
@@ -600,7 +617,9 @@ def _score(f, a_, discount_):
         address=f["Address"], jurisdiction=f["jcode"], prior_sqft=f["prior_sqft"],
         imp_value=f["imp_value"], is_beachfront=None, units=f["units"],
         matched_comps=f["comps"], lot_flags=f["flags"] or None,
-        breakeven=row.get("_breakeven"))
+        breakeven=row.get("_breakeven"),
+        coastal_tier=(coastal_flag(f.get("jcode"), f.get("lat"), f.get("lon"),
+                                   f["Address"]) or {}).get("tier"))
     return row
 
 
@@ -617,7 +636,7 @@ st.markdown(f'<span class="cite">{n_scored} priceable · {len(df)-n_scored} elig
             f'not yet priceable (a data gap, not a rejection).</span>',
             unsafe_allow_html=True)
 st.caption(f"Priced at full asking · yardstick: {a.stamp()}")
-if a.scarcity_premium:
+if getattr(a, "scarcity_premium", 0):
     st.error(f"**Upside case, not the base case.** Every return below includes a "
              f"+{a.scarcity_premium:.0%} scarcity premium on the exit price — the "
              f"2028-29 supply-constraint thesis. Palisades sales through mid-2026 are "
@@ -682,6 +701,17 @@ for _, x in df.iterrows():
             f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
             f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
             unsafe_allow_html=True)
+
+        # ---- Coastal Commission exposure (Palisades) ----
+        _cf = coastal_flag(f.get("jcode"), f.get("lat"), f.get("lon"), x.Address,
+                           over_envelope=bool(f.get("upside")))
+        if _cf and _cf["tier"] in ("HIGH", "LIKELY", "UNKNOWN"):
+            _lbl = {"HIGH": "Coastal Commission — HIGH exposure, check before offering",
+                    "LIKELY": "Coastal Zone likely — worth a 2-minute check",
+                    "UNKNOWN": "Coastal Zone status unknown"}[_cf["tier"]]
+            with st.expander(_lbl):
+                st.markdown(f'<div class="card card-warn">{_cf["note"]}</div>',
+                            unsafe_allow_html=True)
 
         # ---- "what would make this a STRONG buy?" — solved, not guessed ----
         pf_row = x.get("_pf")
