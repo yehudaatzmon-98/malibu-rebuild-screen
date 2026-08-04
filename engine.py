@@ -33,6 +33,79 @@ import pandas as pd
 
 
 # ------------------------------------------------------------------ assumptions
+def ula_tax(sale_price: float, enabled: bool = True) -> dict:
+    """
+    Measure ULA — the LA 'mansion tax'. Missing from the model until now, and it is
+    not small.
+
+    RATES (thresholds indexed to Chained CPI each 1 July; these are the tiers in
+    force for transactions closing after 30 June 2026):
+        under $5,400,000        0%
+        $5,400,000-$10,899,999  4.0%
+        $10,900,000 and above   5.5%
+
+    Two things people get wrong, both of which matter here:
+
+    1. IT APPLIES TO THE ENTIRE SALE PRICE, not just the slice above the threshold.
+       A $5.4M sale owes $216,000. A $5,399,999 sale owes nothing. That is a cliff,
+       not a ramp, and it is worth real money on exits that land near the line.
+
+    2. It is on top of the existing documentary transfer taxes — 0.45% City of LA
+       plus 0.11% County = 0.56% — which apply at every price.
+
+    Seller pays at closing, on gross price, not on gain. Combined with a ~5% broker
+    and closing load, an exit above the threshold really does shed close to 10%.
+
+    REPEAL RISK, and it cuts our way: the Local Taxpayer Protection Act was certified
+    on 3 May 2026 for the 3 November 2026 statewide ballot. If it passes, ULA is
+    replaced by a 0.05% statewide cap. Our exits are 2028-29, so this is genuinely
+    uncertain — which is why it is a switch, not a hardcode. Model it ON as the
+    conservative case.
+    """
+    if not sale_price or sale_price <= 0:
+        return dict(rate=0.0, tax=0.0, tier="none", doc_tax=0.0, total=0.0, near_cliff=False)
+    doc = sale_price * 0.0056  # City 0.45% + County 0.11%, applies at any price
+    if not enabled:
+        return dict(rate=0.0, tax=0.0, tier="ULA off", doc_tax=doc, total=doc,
+                    near_cliff=False)
+    if sale_price >= 10_900_000:
+        rate, tier = 0.055, "5.5% (over $10.9M)"
+    elif sale_price >= 5_400_000:
+        rate, tier = 0.040, "4% ($5.4M-$10.9M)"
+    else:
+        rate, tier = 0.0, "under $5.4M — exempt"
+    tax = sale_price * rate
+    # flag exits sitting just over a threshold, where pricing DOWN nets more
+    near = False
+    for thresh, r in ((5_400_000, 0.040), (10_900_000, 0.055)):
+        if thresh <= sale_price <= thresh * (1 + r + 0.005):
+            near = True
+    return dict(rate=rate, tax=round(tax), tier=tier, doc_tax=round(doc),
+                total=round(tax + doc), near_cliff=near)
+
+
+def cliff_advice(sale_price: float) -> Optional[str]:
+    """
+    Where an exit lands just above a ULA threshold, selling for LESS nets MORE,
+    because the tax hits the whole price rather than the excess. Worth surfacing:
+    it is free money and it is easy to miss.
+    """
+    for thresh, rate in ((5_400_000, 0.040), (10_900_000, 0.055)):
+        if thresh <= sale_price <= thresh * (1 + rate + 0.005):
+            below = thresh - 1_000
+            net_at = sale_price - sale_price * rate
+            net_below = below - (below * 0.055 if below >= 10_900_000 else
+                                 below * 0.040 if below >= 5_400_000 else 0)
+            if net_below > net_at:
+                gain = net_below - net_at
+                return (f"<b>ULA threshold cliff.</b> At ${sale_price:,.0f} the tax is "
+                        f"{rate:.1%} of the <i>whole</i> price (${sale_price*rate:,.0f}). "
+                        f"Pricing at ${below:,.0f} instead nets about "
+                        f"<b>${gain:,.0f} more</b>. The tax is a cliff, not a ramp — "
+                        f"worth designing the exit around.")
+    return None
+
+
 @dataclass
 class Assumptions:
     """
@@ -59,15 +132,18 @@ class Assumptions:
     # bet everywhere it shows up — an LP can argue with the bet without the
     # measured part being contaminated by it.
     scarcity_premium: float = 0.00
+    # Measure ULA. ON by default — it's real today and the repeal vote is a coin flip.
+    apply_ula: bool = True
     hold_years_express: float = 1.5       # like-for-like / express permit
     hold_years_standard: float = 3.0      # CDP / standard track
-    version: str = "v1.1"
+    version: str = "v1.2"
 
     def stamp(self) -> str:
         s = (f"{self.version} · ${self.construction_psf:,.0f}/sf · "
              f"cont {self.contingency_pct:.0%} · carry {self.carrying_rate:.0%} · "
              f"sell {self.selling_cost_pct:.0%} · appr {self.appreciation_pct:.0%} · "
-             f"premium {self.new_build_premium:.0%}")
+             f"premium {self.new_build_premium:.0%}"
+             f"{' · ULA on' if self.apply_ula else ' · ULA OFF'}")
         if self.scarcity_premium:
             s += f" · SCARCITY BET +{self.scarcity_premium:.0%}"
         return s
@@ -188,7 +264,9 @@ class ProForma:
         premium_measured = premium
         premium = premium * (1 + self.a.scarcity_premium)
         gross_sale = premium * self.buildable_sqft
-        net_sale = gross_sale * (1 - self.a.selling_cost_pct)
+        # transfer taxes come off the gross, alongside broker/closing
+        _ula = ula_tax(gross_sale, enabled=self.a.apply_ula)
+        net_sale = gross_sale * (1 - self.a.selling_cost_pct) - _ula["total"]
         profit = net_sale - total_cost
         roc = profit / total_cost if total_cost else 0
         return dict(
@@ -198,6 +276,8 @@ class ProForma:
             construction=round(construction), contingency=round(contingency),
             carry=round(carry), total_cost=round(total_cost),
             gross_sale=round(gross_sale), net_sale=round(net_sale),
+            ula_tax=_ula["tax"], ula_tier=_ula["tier"], doc_tax=_ula["doc_tax"],
+            ula_total=_ula["total"], near_cliff=_ula["near_cliff"],
             profit=round(profit), roc=roc, hold=hold,
         )
 

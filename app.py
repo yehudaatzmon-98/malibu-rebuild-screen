@@ -26,6 +26,8 @@ from engine import (Assumptions, CompMarket, ProForma, sensitivity,
                     what_youd_have_to_believe, discount_to_breakeven, path_to_strong)
 from diligence import build_card, card_to_rows
 from coastal import coastal_flag
+from construction import area_construction_cost
+from engine import ula_tax, cliff_advice
 
 st.set_page_config(page_title="Lot Analyzer", layout="wide",
                    initial_sidebar_state="expanded")
@@ -89,6 +91,12 @@ _assump_kwargs = dict(
     selling_cost_pct=st.sidebar.slider("Selling cost", 0.0, 0.10, 0.05, 0.005),
     appreciation_pct=st.sidebar.slider("Appreciation /yr", -0.05, 0.10, 0.03, 0.005),
     new_build_premium=st.sidebar.slider("New-build premium", 0.0, 0.30, 0.10, 0.01),
+    apply_ula=st.sidebar.checkbox(
+        "Apply Measure ULA (mansion tax)", value=True,
+        help="4% on LA city sales $5.4M-$10.9M, 5.5% above, on the WHOLE price, paid by "
+             "the seller. Plus 0.56% documentary transfer tax at any price. A repeal "
+             "measure is on the Nov 2026 ballot, so it may not survive to our exit — but "
+             "model it on as the conservative case."),
     scarcity_premium=st.sidebar.slider(
         "SCARCITY BET — extra exit premium", 0.0, 0.40, 0.00, 0.05,
         help="The 2028-29 thesis: a rebuilt, supply-constrained Palisades sells above "
@@ -475,9 +483,21 @@ def _gather_facts(raw, addr_col, mkt):
                            prior_sqft=csv_prior, year_built=1960, units=1, use_code="0101")
 
         j = jur.route(p.situs_city if p.found else (None if pd.isna(city) else str(city)))
+        # RTI / plans-in-hand: Redfin remarks often say so outright. A lot that is
+        # already permitted has cleared review — real soft-cost and schedule savings.
+        _blob = " ".join(str(r.get(c, "")) for c in raw.columns
+                         if any(k in str(c).upper() for k in
+                                ("REMARK", "DESCRIPTION", "NOTE", "URL"))).upper()
+        _rti = any(k in _blob for k in
+                   ("RTI", "READY TO ISSUE", "READY-TO-ISSUE", "SHOVEL READY",
+                    "SHOVEL-READY", "PERMITS IN HAND", "PERMITTED", "APPROVED PLANS",
+                    "PLANS APPROVED", "FULLY ENTITLED", "ENTITLED"))
+        _cost = area_construction_cost(addr, default=a.construction_psf)
         f = dict(Address=addr, Jurisdiction=j.name, jcode=j.code,
                  lat=(None if pd.isna(lat) else float(lat)),
                  lon=(None if pd.isna(lon) else float(lon)),
+                 rti=_rti, area_psf=_cost["psf"], area_band=_cost["band"],
+                 area_why=_cost["why"],
                  Price=(float(price) if (price is not None and not pd.isna(price)) else None),
                  prior_sqft=None, imp_value=None, units=None,
                  Buildable=None, build_basis="", upside=None,
@@ -559,9 +579,17 @@ def _score(f, a_, discount_):
         land = float(ask) * (1 - discount_)
     else:
         land = None
+    # cost priority: explicit per-lot override > area-derived default > sidebar
+    _psf = o.get("constr") or f.get("area_psf") or a_.construction_psf
     a_lot = a_
-    if o.get("constr"):
-        a_lot = Assumptions(**{**a_.__dict__, "construction_psf": float(o["constr"])})
+    if float(_psf) != float(a_.construction_psf):
+        a_lot = Assumptions(**{**a_.__dict__, "construction_psf": float(_psf)})
+    # RTI: plans already approved means lower soft cost and a shorter carry. Model it
+    # as a shorter hold rather than inventing a soft-cost line the model doesn't have.
+    if f.get("rti") and not o.get("hold_override"):
+        a_lot = Assumptions(**{**a_lot.__dict__,
+                               "hold_years_express": max(1.0, a_lot.hold_years_express - 0.5),
+                               "hold_years_standard": max(1.5, a_lot.hold_years_standard - 0.75)})
 
     row = dict(Address=f["Address"], Jurisdiction=f["Jurisdiction"], Price=ask,
                Buildable=build, Eligible=f.get("Eligible"), ROC=None,
@@ -599,6 +627,12 @@ def _score(f, a_, discount_):
                  comp_low=f["comp_low"], comp_high=f["comp_high"])) if ask else {}
     row["_breakeven"] = dtb.get("verdict", "")
     up = f" · +storey upside ~{f['upside']:,.0f} sf" if f.get("upside") else ""
+    tags = []
+    if f.get("rti"): tags.append("RTI/permitted")
+    if f.get("area_band") == "alphabet-flats": tags.append("flats — build ~$700/sf")
+    elif f.get("area_band") == "hillside": tags.append("hillside — build ~$1,150/sf")
+    if rr["base"].get("ula_tax"): tags.append(f"ULA ${rr['base']['ula_tax']:,.0f}")
+    tagstr = (" · " + " · ".join(tags)) if tags else ""
     scen = ""
     if o:
         bits = []
@@ -610,8 +644,10 @@ def _score(f, a_, discount_):
     elif discount_:
         scen = f" · scenario −{discount_:.0%}"
     row["Why"] = (f"{build:,.0f} sf ({f['build_basis']}){up} @ ${basis:,.0f}/sf comp basis "
-                  f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%}){scen}. "
+                  f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%}){scen}{tagstr}. "
                   f"{row['_breakeven']}")
+    row["_cliff"] = cliff_advice(rr["base"]["gross_sale"])
+    row["_rti"] = bool(f.get("rti"))
     # rebuild the card now that we know the walk-away number, so step 4 carries it
     row["_card"] = build_card(
         address=f["Address"], jurisdiction=f["jcode"], prior_sqft=f["prior_sqft"],
@@ -701,6 +737,23 @@ for _, x in df.iterrows():
             f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
             f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
             unsafe_allow_html=True)
+
+        # ---- ULA threshold cliff: selling for less can net more ----
+        if x.get("_cliff"):
+            st.markdown(f'<div class="card card-warn">{x["_cliff"]}</div>',
+                        unsafe_allow_html=True)
+        if f.get("area_band") in ("alphabet-flats", "hillside"):
+            st.markdown(f'<div class="card"><span class="cite"><b>Construction cost '
+                        f'${f["area_psf"]:,.0f}/sf</b> — {f["area_why"]}</span></div>',
+                        unsafe_allow_html=True)
+        if f.get("rti"):
+            st.markdown('<div class="card"><span class="cite"><b>Listing mentions RTI / '
+                        'approved plans.</b> Shovel-ready means review is already cleared — '
+                        'lower soft cost and a shorter carry, both modelled here as a '
+                        'shorter hold. <b>Verify the permits are current and transfer</b>: '
+                        'RTI status can lapse and permits have their own clocks. Get the '
+                        'stamped set as a condition of purchase.</span></div>',
+                        unsafe_allow_html=True)
 
         # ---- Coastal Commission exposure (Palisades) ----
         _cf = coastal_flag(f.get("jcode"), f.get("lat"), f.get("lon"), x.Address,
