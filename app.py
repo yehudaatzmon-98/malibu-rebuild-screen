@@ -443,7 +443,9 @@ if not addr_col:
 # county lookup per row, so without caching, moving a slider in the per-lot playground
 # would re-run 172 lookups and take a minute. Key the cache on the file contents +
 # comp source so a new upload recomputes but widget clicks don't.
-_sig = f"{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
+# bump the version segment whenever the fact-gathering logic changes, or lots
+# cached by an older build linger with fields the display now expects.
+_sig = f"v3-{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
 if st.session_state.get("_batch_sig") != _sig:
     st.session_state["_batch_sig"] = _sig
     st.session_state["_facts"] = None
@@ -711,6 +713,9 @@ real look. That's how ~130 becomes the 5 worth an offer.
 shortlist = st.session_state.setdefault("_shortlist", set())
 
 for _, x in df.iterrows():
+    _addr = str(x.Address or "").strip()
+    if not _addr or _addr.lower() in ("nan", "none"):
+        continue
     css = "card"
     if x.Signal == "STRONG": css = "card card-strong"
     elif x.Signal == "PASS": css = "card card-pass"
@@ -737,6 +742,11 @@ for _, x in df.iterrows():
             f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
             f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
             unsafe_allow_html=True)
+
+        # the per-lot facts live on the row. `f` from the scoring loop is NOT in scope
+        # here — reading it directly crashed on the first row that had none (the blank
+        # "nan" row from a trailing line in the CSV).
+        f = x.get("_f") or {}
 
         # ---- ULA threshold cliff: selling for less can net more ----
         if x.get("_cliff"):
