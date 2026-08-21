@@ -144,6 +144,133 @@ def route(situs_city: Optional[str]) -> Jurisdiction:
              f"a spelling not yet in _MALIBU_SITUS / _LA_SITUS — add it there.")
 
 
+def eo8_zoning_envelope(lot_sqft: Optional[float], coastal: bool = False,
+                        hillside: bool = False) -> dict:
+    """
+    THE EO8 PATH — where the prior structure is NOT the ceiling.
+
+    EO1 rebuilds what was there, capped at footprint AND height x110%. EO8 is the
+    other route: a zoning-compliant, non-like-for-like single-family rebuild that
+    bypasses local Coastal Act and CEQA review. Under EO8 the constraint is LAMC
+    zoning, not what burned.
+
+    THIS MATTERS ENORMOUSLY ON LOTS WITH A SMALL OR SINGLE-STOREY PRIOR HOUSE.
+    Worked example — 627 N Marquette, a 1952 one-storey 1,440 sf dwelling on a
+    7,750 sf lot:
+
+        EO1:  footprint 1,440 x 1.10 = 1,584 sf, and the height cap (15ft x 1.10
+              = 16.5ft) forecloses a second storey. Unsellable.
+        EO8:  R1 RFA at 0.45 x 7,750 = 3,488 sf over two storeys within the 33ft
+              height limit. A real house.
+
+    More than double, on the same dirt. A tool that only computes EO1 systematically
+    understates exactly the lots that are cheapest to buy — the ones where a small
+    old house burned.
+
+    THE NUMBERS (LAMC, Baseline Mansionization Ordinance as amended):
+      R1 base residential floor area ratio         0.45 of lot area
+      20% bonus for qualifying design/green work   -> effectively 0.54
+      height, flat lot                             33 ft (two storeys comfortable)
+      required covered parking                     200 sf per space exempt from RFA
+      lot coverage                                 ~45%
+
+    CAVEATS THAT MUST TRAVEL WITH THE NUMBER:
+      * Coastal Zone lots outside a Hillside Area are NOT subject to Residential
+        Floor Area limits but ARE subject to Floor Area limits under LAMC 12.21.1A.
+        Different rule, different number — flagged, not computed here.
+      * Hillside lots fall under the Baseline Hillside Ordinance, where FAR slides
+        from 0.50 down to 0.30 or lower with slope. Also flagged, not computed.
+      * R1 Variation Zones (R1V, R1F, R1R, R1H) carry their own FAR and height.
+        Confirm the exact zone string on ZIMAS before relying on this.
+    """
+    if not lot_sqft or lot_sqft <= 0:
+        return dict(base=None, note=("No lot size — can't compute the EO8 zoning "
+                                     "envelope. Lot area is the whole input."))
+    if coastal:
+        return dict(base=None, flagged=True, note=(
+            "<b>Coastal Zone lot — the R1 floor-area ratio does not apply.</b> "
+            "Coastal Zone properties outside a Hillside Area are exempt from "
+            "Residential Floor Area limits but subject to Floor Area limits under "
+            "LAMC 12.21.1 A. Confirm the applicable limit on ZIMAS before assuming "
+            "either envelope."))
+    if hillside:
+        return dict(base=None, flagged=True, note=(
+            "<b>Hillside lot — Baseline Hillside Ordinance governs.</b> FAR slides "
+            "from about 0.50 down to 0.30 or lower as slope increases, and can reach "
+            "zero on the steepest bands. Needs the slope analysis, not a flat-lot "
+            "ratio."))
+
+    base = round(lot_sqft * 0.45)
+    bonus = round(base * 1.20)
+    return dict(
+        base=base, bonus=bonus, height_ft=33, garage_exempt=200,
+        note=(f"<b>EO8 zoning envelope ≈ {base:,} sf</b> (R1 base ratio 0.45 × "
+              f"{lot_sqft:,.0f} sf lot), or <b>{bonus:,} sf</b> with the 20% design "
+              f"bonus. Height limit 33ft on a flat lot, so two storeys fit. Required "
+              f"covered parking is exempt up to 200 sf per space.<br>"
+              f"<span class='cite'>EO8 permits a zoning-compliant non-like-for-like "
+              f"rebuild and bypasses local Coastal Act and CEQA review. The prior "
+              f"structure is not the ceiling on this path. Confirm the exact zone "
+              f"string on ZIMAS — R1 Variation Zones carry different ratios.</span>"))
+
+
+def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = None,
+                  storeys: Optional[int] = None, prior_height_ft: Optional[float] = None,
+                  coastal: bool = False, hillside: bool = False) -> dict:
+    """
+    Take the GREATER of the EO1 rebuild envelope and the EO8 zoning envelope.
+
+    This is the fix for the systematic error. The screener computed EO1 only, which
+    is right for a lot whose prior house was large, and badly wrong for a lot whose
+    prior house was small. Both are legitimate paths; the developer picks whichever
+    is bigger.
+
+    One extra input earns its keep here: PRIOR HEIGHT. EO1 caps height at 110% of
+    what stood. A 15ft single-storey prior gives a 16.5ft cap, which forecloses the
+    second storey and collapses the EO1 case regardless of footprint. Without the
+    height we infer conservatively from storey count.
+    """
+    eo1 = la_envelope_estimate(prior_gross_sqft, lot_sqft=lot_sqft, storeys=storeys)
+    eo8 = eo8_zoning_envelope(lot_sqft, coastal=coastal, hillside=hillside)
+
+    eo1_base = eo1.get("base")
+    eo1_upside = eo1.get("upside")
+    # If prior height is known and low, the EO1 storey-add is not available.
+    height_blocks_storey = False
+    if prior_height_ft and prior_height_ft * 1.10 < 20:
+        height_blocks_storey = True
+        eo1_upside = None
+
+    eo8_base = eo8.get("base")
+    candidates = [(eo1_base, "EO1 like-for-like"), (eo8_base, "EO8 zoning")]
+    best = max((c for c in candidates if c[0]), key=lambda c: c[0], default=(None, None))
+
+    note_parts = []
+    if height_blocks_storey:
+        note_parts.append(
+            f"<b>EO1 height cap forecloses a second storey.</b> Prior height "
+            f"{prior_height_ft:.0f}ft × 1.10 = {prior_height_ft*1.10:.1f}ft, which will "
+            f"not accommodate two storeys. The EO1 route yields a single storey here "
+            f"regardless of footprint.")
+    if eo1_base and eo8_base and eo8_base > eo1_base * 1.25:
+        note_parts.append(
+            f"<b>The zoning path is materially larger than the rebuild path</b> — "
+            f"{eo8_base:,} sf against {eo1_base:,} sf. On a lot where a small or old "
+            f"house burned, EO8 is usually the route worth underwriting.")
+    elif eo1_base and eo8_base and eo1_base > eo8_base:
+        note_parts.append(
+            f"<b>The rebuild path is larger here</b> — {eo1_base:,} sf against "
+            f"{eo8_base:,} sf of zoning capacity. The prior house was big relative to "
+            f"the lot, which is the thesis working as intended.")
+
+    return dict(
+        best_sqft=best[0], best_path=best[1],
+        eo1_base=eo1_base, eo1_upside=eo1_upside, eo1_note=eo1.get("note"),
+        eo8_base=eo8_base, eo8_bonus=eo8.get("bonus"), eo8_note=eo8.get("note"),
+        height_blocks_storey=height_blocks_storey,
+        note="<br><br>".join(note_parts) if note_parts else "")
+
+
 def la_envelope_estimate(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = None,
                          storeys: Optional[int] = None,
                          listing_sqft: Optional[int] = None) -> dict:

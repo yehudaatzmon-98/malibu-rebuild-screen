@@ -518,17 +518,24 @@ def _gather_facts(raw, addr_col, mkt):
                  imp_value=getattr(p, "imp_value", None), units=p.units,
                  rule_note=t.reason[:120])
 
-        build = None; build_basis = ""; upside = None
+        build = None; build_basis = ""; upside = None; envelope = None
         if j.code == "MALIBU" and p.prior_sqft:
             ph, _ = ceiling_from_year(p.year_built)
             if ph:
                 build = envelope_both_cases(p.prior_sqft, ph, 10.0)["as_of_right"]["habitable"]
                 build_basis = "as-of-right rebuild"
-        elif j.code == "CITY_OF_LA" and p.prior_sqft:
-            est = jur.la_envelope_estimate(p.prior_sqft, lot_sqft=p.lot_sqft)
-            build = est["base"]; upside = est.get("upside")
-            build_basis = "EO1 base (rebuild same massing)"
-        f.update(Buildable=build, build_basis=build_basis, upside=upside)
+        elif j.code == "CITY_OF_LA" and (p.prior_sqft or p.lot_sqft):
+            # Take the GREATER of the EO1 rebuild envelope and the EO8 zoning
+            # envelope. Computing EO1 alone systematically understates lots where a
+            # small or single-storey house burned — which are the cheapest to buy.
+            be = jur.best_envelope(p.prior_sqft, lot_sqft=p.lot_sqft)
+            build = be.get("best_sqft")
+            upside = be.get("eo1_upside") or be.get("eo8_bonus")
+            build_basis = ("EO8 zoning (R1 0.45 FAR)" if be.get("best_path") == "EO8 zoning"
+                           else "EO1 base (rebuild same massing)")
+            envelope = be
+        f.update(Buildable=build, build_basis=build_basis, upside=upside,
+                 envelope=envelope)
 
         if build:
             m = mkt.match(j.code, build, lat if not pd.isna(lat) else None,
@@ -752,6 +759,24 @@ for _, x in df.iterrows():
         if x.get("_cliff"):
             st.markdown(f'<div class="card card-warn">{x["_cliff"]}</div>',
                         unsafe_allow_html=True)
+        # ---- which legal path gives the bigger house ----
+        _env = f.get("envelope")
+        if _env and _env.get("eo1_base") and _env.get("eo8_base"):
+            _e1, _e8 = _env["eo1_base"], _env["eo8_base"]
+            _win = "EO8 zoning" if _e8 > _e1 else "EO1 rebuild"
+            with st.expander(f"Which path gives the bigger house? → {_win}"):
+                st.markdown(
+                    f'<div class="card"><span class="cite">'
+                    f'<b>EO1 like-for-like:</b> {_e1:,} sf — rebuild what burned, '
+                    f'footprint and height both capped at 110%.<br>'
+                    f'<b>EO8 zoning-compliant:</b> {_e8:,} sf base, '
+                    f'{_env.get("eo8_bonus", 0):,} sf with the 20% design bonus — the '
+                    f'prior structure is not the ceiling, LAMC zoning is. Bypasses local '
+                    f'Coastal Act and CEQA review.<br><br>'
+                    f'<b>Underwritten on the larger: {max(_e1,_e8):,} sf via {_win}.</b>'
+                    f'{"<br><br>" + _env["note"] if _env.get("note") else ""}'
+                    f'</span></div>', unsafe_allow_html=True)
+
         if f.get("area_band") in ("alphabet-flats", "hillside"):
             st.markdown(f'<div class="card"><span class="cite"><b>Construction cost '
                         f'${f["area_psf"]:,.0f}/sf</b> — {f["area_why"]}</span></div>',
