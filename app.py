@@ -470,6 +470,23 @@ def _gather_facts(raw, addr_col, mkt):
         city = r.get("CITY"); price = r.get("PRICE"); prior = r.get("PRIOR_SQFT")
         lat, lon = r.get("LATITUDE"), r.get("LONGITUDE")
 
+        # Lot size drives the EO8 zoning envelope, and Redfin exports carry it.
+        # Previously we only used the county's figure, so any lot the county lookup
+        # missed had no zoning path at all — which silently suppressed the larger of
+        # the two envelopes on exactly the cheap lots we care about.
+        csv_lot = None
+        _lot_raw = None
+        for _c in raw.columns:
+            if "LOT SIZE" in str(_c).upper() or str(_c).upper() == "LOT_SQFT":
+                _lot_raw = r.get(_c); break
+        if _lot_raw is not None and not pd.isna(_lot_raw):
+            try:
+                _v = float(str(_lot_raw).replace(",", "").replace("$", "").strip())
+                # Redfin gives acres on large parcels; convert anything implausibly small
+                csv_lot = round(_v * 43_560) if 0 < _v < 100 else round(_v)
+            except (TypeError, ValueError):
+                csv_lot = None
+
         csv_prior = None
         if prior is not None and not pd.isna(prior):
             try: csv_prior = int(float(prior))
@@ -483,6 +500,11 @@ def _gather_facts(raw, addr_col, mkt):
                 p = Parcel(found=True, situs=addr,
                            situs_city=(None if pd.isna(city) else str(city)),
                            prior_sqft=csv_prior, year_built=1960, units=1, use_code="0101")
+
+        # county lot size wins; CSV fills the gap
+        if csv_lot and not getattr(p, "lot_sqft", None):
+            try: p.lot_sqft = csv_lot
+            except Exception: pass
 
         j = jur.route(p.situs_city if p.found else (None if pd.isna(city) else str(city)))
         # RTI / plans-in-hand: Redfin remarks often say so outright. A lot that is
