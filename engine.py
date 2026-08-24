@@ -113,34 +113,72 @@ class Assumptions:
     so a lot scored today stays comparable to one scored last week. The version
     string stamps every output.
     """
-    construction_psf: float = 1000.0      # Tal confirmed $1,000 fully loaded
-    contingency_pct: float = 0.08         # a spec build with zero contingency isn't a pro forma
-    carrying_rate: float = 0.03           # annual, on land + half the construction draw
-    selling_cost_pct: float = 0.05        # broker + closing on the sale
-    appreciation_pct: float = 0.03        # forward escalation — biggest unknown, kept modest
-    new_build_premium: float = 0.10       # brand-new over the resale comps
-    # THE SCARCITY BET — deliberately zero in the base case.
-    #
-    # The thesis is that by 2028-29 a rebuilt Palisades is supply-constrained and a
-    # finished house commands more than today's comps imply. That may well be true.
-    # It is also, today, a forecast rather than an observation: Palisades sales
-    # through mid-2026 show roughly flat pricing (~+1.5%/yr on size-controlled
-    # medians), which is BELOW the 3% appreciation already assumed.
-    #
-    # So it lives here, separately, at zero. The base case contains only what the
-    # data supports. Turn it on to see the upside case, and it stays labelled as a
-    # bet everywhere it shows up — an LP can argue with the bet without the
-    # measured part being contaminated by it.
+    """
+    ONE CAPITAL STACK, RECONCILED (v2.0).
+
+    Three different financing models had been in play at once: Michael's sheet (65%
+    LTC construction loan at 10.5%), this engine's original simplified carry (3%/yr
+    on land plus half the draw), and a high-leverage structure (50% down on the land,
+    construction fully financed, interest as a capitalised reserve, only taxes and
+    insurance out of pocket). They differed by $200-325k on the same lot, which is
+    enough to move a decision.
+
+    This is now a single model with the capital structure exposed as parameters, so
+    all three are expressible and comparable rather than being separate arithmetic.
+    """
+    # ---- build cost ----
+    construction_psf: float = 750.0       # Alphabet flats; hillside runs ~1,150
+    ae_pct: float = 0.05                  # architecture and engineering, % of hard cost
+    contingency_pct: float = 0.08         # a spec build with no contingency isn't a pro forma
+
+    # ---- capital structure ----
+    # High-leverage structure is the default: half the land down, construction fully
+    # financed by the lender, interest capitalised rather than paid monthly. It
+    # minimises cash in and maximises cash-on-cash, and it magnifies the downside by
+    # the same factor — both are shown wherever it is used.
+    land_ltv: float = 0.50                # lender's advance against the land
+    construction_ltc: float = 1.00        # lender's advance against build costs
+    loan_rate: float = 0.105              # construction loan rate
+    avg_utilisation: float = 0.55         # average drawn balance across the build
+    capitalise_interest: bool = True      # interest reserve inside the loan
+
+    # ---- schedule ----
+    # Two Palisades builds pulled from LADBS ran 34 and 35 months. Tal's own estimate
+    # was 12-18. 18 is the base; the sensitivity is exposed rather than buried.
+    build_months: float = 18.0
+    sale_months: float = 4.0
+    taxes_insurance_annual: float = 32_500.0   # the genuine out-of-pocket carry
+
+    # ---- exit ----
+    selling_cost_pct: float = 0.05        # broker + closing
+    appreciation_pct: float = 0.03        # forward escalation; observed drift ~1.5%
+    new_build_premium: float = 0.10       # measured at 19-26% size-controlled
+
+    # THE SCARCITY BET — deliberately zero in the base case. The 2028-29
+    # supply-constraint thesis may prove right, but Palisades pricing through
+    # mid-2026 is roughly flat, so it is a forecast rather than an observation and
+    # it stays labelled as a bet wherever it appears.
     scarcity_premium: float = 0.00
-    # Measure ULA. ON by default — it's real today and the repeal vote is a coin flip.
+
+    # Measure ULA. On by default — real today, and the repeal vote is a coin flip.
     apply_ula: bool = True
-    hold_years_express: float = 1.5       # like-for-like / express permit
-    hold_years_standard: float = 3.0      # CDP / standard track
-    version: str = "v1.2"
+
+    version: str = "v2.0"
+
+    # ---- legacy shims, so older call sites keep working ----
+    carrying_rate: float = 0.03
+    hold_years_express: float = 1.5
+    hold_years_standard: float = 3.0
+
+    @property
+    def total_months(self) -> float:
+        return self.build_months + self.sale_months
 
     def stamp(self) -> str:
-        s = (f"{self.version} · ${self.construction_psf:,.0f}/sf · "
-             f"cont {self.contingency_pct:.0%} · carry {self.carrying_rate:.0%} · "
+        s = (f"{self.version} · ${self.construction_psf:,.0f}/sf · A&E {self.ae_pct:.0%} · "
+             f"cont {self.contingency_pct:.0%} · {self.land_ltv:.0%} land LTV / "
+             f"{self.construction_ltc:.0%} constr LTC @ {self.loan_rate:.1%} · "
+             f"{self.build_months:.0f}+{self.sale_months:.0f}mo · "
              f"sell {self.selling_cost_pct:.0%} · appr {self.appreciation_pct:.0%} · "
              f"premium {self.new_build_premium:.0%}"
              f"{' · ULA on' if self.apply_ula else ' · ULA OFF'}")
@@ -250,36 +288,119 @@ class ProForma:
     comp_high: Optional[float] = None
 
     def _run_one(self, exit_psf: float) -> dict:
-        hold = self.a.hold_years_express if self.express else self.a.hold_years_standard
-        construction = self.buildable_sqft * self.a.construction_psf
-        contingency = construction * self.a.contingency_pct
-        # carry on land for the whole hold + half the construction draw
-        carry = (self.land_cost + 0.5 * construction) * self.a.carrying_rate * hold
-        total_cost = self.land_cost + construction + contingency + carry
-        # exit: comp basis, escalated forward, plus new-build premium
-        escalated = exit_psf * ((1 + self.a.appreciation_pct) ** hold)
-        premium = escalated * (1 + self.a.new_build_premium)
-        # the scarcity bet is applied LAST and tracked separately, so the measured
-        # part of the exit price is always recoverable from the output
-        premium_measured = premium
-        premium = premium * (1 + self.a.scarcity_premium)
+        """
+        One capital stack, computed the way the deal is actually financed.
+
+        COSTS
+          land + hard construction + A&E + contingency        = project costs
+          lender advances land_ltv on the land and
+          construction_ltc on the build costs                 = loan principal
+          interest accrues on the land advance for the whole
+          term and on the build advance at average utilisation
+          (capitalised as a reserve, not paid monthly)
+          taxes and insurance are the genuine cash carry
+
+        EQUITY is what actually leaves the bank account: the portion of project
+        costs the loan does not fund, plus the cash carry. Under the default
+        structure that is half the land plus taxes and insurance — which is the
+        point of the structure.
+        """
+        a = self.a
+        months = a.total_months
+        yrs = months / 12.0
+
+        hard = self.buildable_sqft * a.construction_psf
+        ae = hard * a.ae_pct
+        contingency = hard * a.contingency_pct
+        build_costs = hard + ae + contingency
+        project_costs = self.land_cost + build_costs
+
+        land_loan = self.land_cost * a.land_ltv
+        build_loan = build_costs * a.construction_ltc
+        loan_principal = land_loan + build_loan
+
+        # land is drawn day one and carries the full term; build draws ramp
+        interest = (land_loan * a.loan_rate * yrs
+                    + build_loan * a.loan_rate * (a.build_months / 12.0)
+                      * a.avg_utilisation
+                    + build_loan * a.loan_rate * (a.sale_months / 12.0))
+        cash_carry = a.taxes_insurance_annual * yrs
+
+        total_cost = project_costs + interest + cash_carry
+        equity = (project_costs - loan_principal) + cash_carry
+        if not a.capitalise_interest:
+            equity += interest
+
+        # exit: comp basis escalated forward, plus the measured new-build premium
+        escalated = exit_psf * ((1 + a.appreciation_pct) ** yrs)
+        premium_measured = escalated * (1 + a.new_build_premium)
+        # the scarcity bet applies LAST and is tracked separately so the measured
+        # part of the exit price stays recoverable
+        premium = premium_measured * (1 + a.scarcity_premium)
         gross_sale = premium * self.buildable_sqft
-        # transfer taxes come off the gross, alongside broker/closing
-        _ula = ula_tax(gross_sale, enabled=self.a.apply_ula)
-        net_sale = gross_sale * (1 - self.a.selling_cost_pct) - _ula["total"]
+
+        _ula = ula_tax(gross_sale, enabled=a.apply_ula)
+        selling = gross_sale * a.selling_cost_pct
+        net_sale = gross_sale - selling - _ula["total"]
         profit = net_sale - total_cost
-        roc = profit / total_cost if total_cost else 0
+
         return dict(
             exit_psf=round(exit_psf), effective_psf=round(premium),
             effective_psf_measured=round(premium_measured),
-            scarcity_applied=self.a.scarcity_premium,
-            construction=round(construction), contingency=round(contingency),
-            carry=round(carry), total_cost=round(total_cost),
-            gross_sale=round(gross_sale), net_sale=round(net_sale),
+            scarcity_applied=a.scarcity_premium,
+            construction=round(hard), ae=round(ae), contingency=round(contingency),
+            project_costs=round(project_costs),
+            loan=round(loan_principal), land_loan=round(land_loan),
+            build_loan=round(build_loan),
+            interest=round(interest), carry=round(cash_carry),
+            total_cost=round(total_cost), equity=round(equity),
+            gross_sale=round(gross_sale), selling=round(selling),
+            net_sale=round(net_sale),
             ula_tax=_ula["tax"], ula_tier=_ula["tier"], doc_tax=_ula["doc_tax"],
             ula_total=_ula["total"], near_cliff=_ula["near_cliff"],
-            profit=round(profit), roc=roc, hold=hold,
+            profit=round(profit),
+            roc=(profit / total_cost if total_cost else 0),
+            coc=(profit / equity if equity else 0),
+            hold=yrs, months=months,
         )
+
+    def breakeven_sale_psf(self) -> float:
+        """
+        The actual sale price per square foot at which this deal returns exactly zero.
+
+        This is deliberately NOT the comp basis. _run_one takes today's comp basis
+        and escalates it forward by the appreciation assumption and the new-build
+        premium before selling — so "exit price" was being used for two different
+        things: today's market, and the 2028 sale.
+
+        Margin over market compares this figure against TODAY's comparable median.
+        That framing is the conservative one: it states plainly how far the market
+        has to move from where it is now, rather than quietly assuming the move and
+        then reporting the result as if it were margin.
+        """
+        a = self.a
+        months = a.total_months
+        yrs = months / 12.0
+        hard = self.buildable_sqft * a.construction_psf
+        build_costs = hard * (1 + a.ae_pct + a.contingency_pct)
+        project_costs = self.land_cost + build_costs
+        land_loan = self.land_cost * a.land_ltv
+        build_loan = build_costs * a.construction_ltc
+        interest = (land_loan * a.loan_rate * yrs
+                    + build_loan * a.loan_rate * (a.build_months / 12.0) * a.avg_utilisation
+                    + build_loan * a.loan_rate * (a.sale_months / 12.0))
+        total_cost = project_costs + interest + a.taxes_insurance_annual * yrs
+
+        # solve gross_sale where gross - selling - transfer taxes = total_cost
+        lo, hi = 0.0, total_cost * 4
+        for _ in range(60):
+            g = (lo + hi) / 2
+            net = g - g * a.selling_cost_pct - ula_tax(g, enabled=a.apply_ula)["total"]
+            if net < total_cost:
+                lo = g
+            else:
+                hi = g
+        return ((lo + hi) / 2) / self.buildable_sqft if self.buildable_sqft else 0.0
 
     def run(self) -> dict:
         if self.exit_psf_basis is None:

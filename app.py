@@ -26,6 +26,8 @@ from engine import (Assumptions, CompMarket, ProForma, sensitivity,
                     what_youd_have_to_believe, discount_to_breakeven, path_to_strong)
 from diligence import build_card, card_to_rows
 from coastal import coastal_flag
+from verification import (Verified, margin_over_market, rank_score,
+                          confidence_note, ladbs_links)
 from construction import area_construction_cost
 from engine import ula_tax, cliff_advice
 
@@ -91,6 +93,15 @@ _assump_kwargs = dict(
     selling_cost_pct=st.sidebar.slider("Selling cost", 0.0, 0.10, 0.05, 0.005),
     appreciation_pct=st.sidebar.slider("Appreciation /yr", -0.05, 0.10, 0.03, 0.005),
     new_build_premium=st.sidebar.slider("New-build premium", 0.0, 0.30, 0.10, 0.01),
+    land_ltv=st.sidebar.slider("Lender advance on LAND", 0.0, 0.80, 0.50, 0.05,
+        help="Tal's structure is 50% down on the land, i.e. a 50% advance."),
+    construction_ltc=st.sidebar.slider("Lender advance on BUILD costs", 0.0, 1.0, 1.00, 0.05,
+        help="Construction fully financed in the default structure."),
+    loan_rate=st.sidebar.slider("Construction loan rate", 0.05, 0.15, 0.105, 0.005),
+    build_months=st.sidebar.slider("Build months", 10, 36, 18, 1,
+        help="Two Palisades builds pulled from LADBS ran 34 and 35 months. "
+             "18 is the base case; slide it to see the cost of a longer schedule."),
+    ae_pct=st.sidebar.slider("Architecture & engineering", 0.0, 0.12, 0.05, 0.01),
     apply_ula=st.sidebar.checkbox(
         "Apply Measure ULA (mansion tax)", value=True,
         help="4% on LA city sales $5.4M-$10.9M, 5.5% above, on the WHOLE price, paid by "
@@ -678,6 +689,26 @@ def _score(f, a_, discount_):
                   f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%}){scen}{tagstr}. "
                   f"{row['_breakeven']}")
     row["_cliff"] = cliff_advice(rr["base"]["gross_sale"])
+
+    # ---- margin over market: the metric that actually separates lots ----
+    # Solve the exit price at which this lot returns exactly zero, then compare it
+    # to the matched comparable median. Everything on the cost side collapses into
+    # the breakeven; everything on the revenue side into the median.
+    # the engine now solves this directly, against TODAY's market rather than an
+    # escalated one — the conservative framing
+    row["_breakeven_psf"] = pf.breakeven_sale_psf()
+
+    # provenance of the prior-area figure this lot's economics rest on
+    _src = ("CERTIFIED" if f.get("area_source") == "CERTIFIED"
+            else "PERMIT" if f.get("area_source") == "PERMIT"
+            else "ASSESSOR" if f.get("prior_from_county")
+            else "SHEET" if f.get("prior_sqft") else "NONE")
+    _v = Verified(f.get("prior_sqft"), _src, height_ft=f.get("prior_height_ft"))
+    row["_verified"] = _v
+    _mm = margin_over_market(row["_breakeven_psf"], basis)
+    row["_margin"] = _mm
+    row["_rank_score"] = rank_score(_mm["margin"] if _mm else None,
+                                    _v.weight, bool(_v.height_ft))
     row["_rti"] = bool(f.get("rti"))
     # rebuild the card now that we know the walk-away number, so step 4 carries it
     row["_card"] = build_card(
@@ -694,7 +725,14 @@ df = pd.DataFrame([_score(f, a, discount) for f in facts])
 tier = {"STRONG":0,"BUY":1,"MAYBE":2,"PASS":3,"NO COMPS":4,"NEED PRICE":5,
         "NEED PRIOR SF":6,"—":7,"NO DATA":8}
 df["_t"] = df.Signal.map(lambda s: tier.get(s, 7))
-df = df.sort_values(["_t","ROC"], ascending=[True, False], na_position="last").drop(columns="_t")
+# Primary sort is margin over market with a provenance penalty — a lot you can act
+# on outranks one that merely looks good. ROC only breaks ties.
+if "_rank_score" in df.columns and df["_rank_score"].notna().any():
+    df = df.sort_values(["_t", "_rank_score", "ROC"],
+                        ascending=[True, True, False], na_position="last").drop(columns="_t")
+else:
+    df = df.sort_values(["_t","ROC"], ascending=[True, False],
+                        na_position="last").drop(columns="_t")
 
 n_scored = df.ROC.notna().sum()
 st.markdown("---")
@@ -755,6 +793,13 @@ for _, x in df.iterrows():
     if pd.notna(x.ROC): bits.append(f"<b>{x.ROC:.0%} ROC</b>")
     be = x.get("_breakeven")
     if be: bits.append(f'<b>{be}</b>')
+    _mm = x.get("_margin")
+    if _mm:
+        _col = {"STRONG":"#1f5c2e","GOOD":"#1f5c2e","TIGHT":"#8a5a00",
+                "STRETCH":"#8a5a00","NO":"#7a2518"}.get(_mm["tier"], "#55524a")
+        bits.insert(0, f'<b style="color:{_col}">{_mm["tier"]} · '
+                       f'breakeven ${_mm["breakeven"]:,}/sf vs market ${_mm["median"]:,} '
+                       f'({_mm["margin"]:+.0%})</b>')
 
     # Tal: "I find a property I like. How do I export it? I don't want to write it down."
     keep_col, card_col = st.columns([1, 22])
@@ -781,6 +826,19 @@ for _, x in df.iterrows():
         if x.get("_cliff"):
             st.markdown(f'<div class="card card-warn">{x["_cliff"]}</div>',
                         unsafe_allow_html=True)
+        # ---- what the economics actually rest on ----
+        _v = x.get("_verified")
+        if _v is not None:
+            _css = "card" if _v.is_verified else "card card-warn"
+            st.markdown(f'<div class="{_css}"><span class="cite">'
+                        f'{confidence_note(_v, f.get("jcode","CITY_OF_LA"))}'
+                        f'</span></div>', unsafe_allow_html=True)
+            if not _v.is_verified:
+                with st.expander("How to verify this in ten minutes (free)"):
+                    for step, detail in ladbs_links(x.Address).items():
+                        st.markdown(f'<span class="cite"><b>{step}</b> — {detail}</span>',
+                                    unsafe_allow_html=True)
+
         # ---- which legal path gives the bigger house ----
         _env = f.get("envelope")
         if _env and _env.get("eo1_base") and _env.get("eo8_base"):
@@ -953,7 +1011,8 @@ st.markdown("---")
 # It lives in the SIDEBAR: with 130+ lot cards on the page, anything rendered below
 # them is effectively invisible. The sidebar stays on screen while he scrolls, so the
 # basket is always in view and the count updates the moment he stars something.
-_internal = [c for c in ["_card", "_f", "_override", "_breakeven", "_pf"] if c in df.columns]
+_internal = [c for c in ["_card","_f","_override","_breakeven","_pf","_verified",
+              "_margin","_rank_score","_breakeven_psf","_cliff","_rti"] if c in df.columns]
 
 def _shortlist_exports(sl):
     """Build the two CSVs for the starred lots: the handoff summary and the checklist."""
