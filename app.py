@@ -28,6 +28,7 @@ from diligence import build_card, card_to_rows
 from coastal import coastal_flag
 from verification import (Verified, margin_over_market, rank_score,
                           confidence_note, ladbs_links)
+from cofo_parser import parse_cofo, parse_cofo_pdf, to_csv_row
 from construction import area_construction_cost
 from engine import ula_tax, cliff_advice
 
@@ -323,6 +324,89 @@ if pal_only:
 
 mkt = CompMarket(comps_df)
 
+# ---- verified records: paste a Certificate of Occupancy ----
+# The LADBS pull is the only trustworthy source for prior area, and it can't be
+# automated. What CAN be removed is the transcription: paste the certificate text
+# and every field the model needs is extracted and tagged CERTIFIED. Entries
+# accumulate across the session and export as a CSV that feeds straight back in.
+_vault = st.session_state.setdefault("_verified_records", {})
+
+with st.expander(f"Verified records — paste a Certificate of Occupancy  "
+                 f"({len(_vault)} on file)"):
+    st.markdown(
+        '<span class="cite">Open the property on LADBS, click <b>Certificate of '
+        'Occupancy</b>, open the PDF, select all the text and copy it. Paste below. '
+        'This pulls floor area, height, stories, basement levels, lot size, zone, '
+        'Coastal Zone, Hillside Ordinance, ESA and fire district in one go.<br><br>'
+        '<b>Why it matters:</b> every prior-square-footage figure we have checked '
+        'against a working sheet was wrong, and always overstated. A certified '
+        'figure outranks everything else in the model.</span>',
+        unsafe_allow_html=True)
+    _pdfs = st.file_uploader(
+        "Certificate of Occupancy PDF — upload one or several",
+        type=["pdf"], accept_multiple_files=True, key="cofo_pdfs",
+        help="On LADBS, open Certificate of Occupancy and use Print as PDF, or open "
+             "the PDF icon and save it. Drop the file here — no typing.")
+    if _pdfs:
+        for _pf in _pdfs:
+            _p = parse_cofo_pdf(_pf)
+            if _p.get("ok"):
+                _row = to_csv_row(_p, "")
+                _key = (_row["ADDRESS"] or _pf.name).strip()
+                _vault[_key] = _row
+                st.success(f"{_pf.name} → {_key}  ·  "
+                           f"{_p.get('prior_sqft'):,.0f} sf, "
+                           f"{_p.get('prior_height_ft', 0):.1f} ft, "
+                           f"{_p.get('stories', '?')} storeys")
+            elif _p.get("scanned"):
+                st.warning(f"{_pf.name}: scanned image, no text layer. Older "
+                           f"certificates are photographs of paper. Read the figures "
+                           f"off it and use the manual entry below.")
+            else:
+                for _n in _p.get("notes", []):
+                    st.error(f"{_pf.name}: {_n}")
+            for _n in _p.get("notes", [])[1:]:
+                st.info(_n)
+
+    st.markdown('<span class="cite">If the PDF is a scan, or you only have the page on '
+                'screen, paste the text instead:</span>', unsafe_allow_html=True)
+    _cv1, _cv2 = st.columns([2, 1])
+    with _cv1:
+        _paste = st.text_area("Certificate text (fallback)", height=120,
+                              key="cofo_paste",
+                              placeholder="Paste the STRUCTURAL INVENTORY and PARCEL "
+                                          "INFORMATION blocks.")
+    with _cv2:
+        _addr_for = st.text_input("Address (if not in the text)", key="cofo_addr")
+        if st.button("Read pasted text", key="cofo_go") and _paste:
+            _p = parse_cofo(_paste)
+            if _p.get("ok"):
+                _row = to_csv_row(_p, _addr_for)
+                _key = (_row["ADDRESS"] or _addr_for or f"record {len(_vault)+1}").strip()
+                _vault[_key] = _row
+                st.success(f"Read: {_key}")
+            else:
+                st.error("Couldn't find a floor area or lot size in that text.")
+            for _n in _p.get("notes", []):
+                st.warning(_n)
+
+    if _vault:
+        _vdf = pd.DataFrame(list(_vault.values()))
+        st.dataframe(_vdf, use_container_width=True, hide_index=True)
+        _vb = io.StringIO(); _vdf.to_csv(_vb, index=False)
+        _d1, _d2 = st.columns(2)
+        with _d1:
+            st.download_button("Download verified records", _vb.getvalue(),
+                               "verified_records.csv", "text/csv", key="dl_vault")
+        with _d2:
+            if st.button("Clear", key="clr_vault"):
+                st.session_state["_verified_records"] = {}
+                st.rerun()
+        st.markdown('<span class="cite">Add these columns to your Redfin CSV — or '
+                    'merge this file into it — and the analyzer will use the certified '
+                    'figures and rank them above unverified lots.</span>',
+                    unsafe_allow_html=True)
+
 up = st.file_uploader("Redfin CSV", type=["csv"])
 st.markdown('<span class="cite">Redfin search results → Download. Add a PRIOR_SQFT '
             'column if you have it — it turns the envelope from estimated into sourced.</span>',
@@ -481,6 +565,22 @@ def _gather_facts(raw, addr_col, mkt):
         city = r.get("CITY"); price = r.get("PRICE"); prior = r.get("PRIOR_SQFT")
         lat, lon = r.get("LATITUDE"), r.get("LONGITUDE")
 
+        # Verified fields, when the CSV carries them (from the C of O parser or
+        # entered by hand). These outrank the county record and the working sheet.
+        def _col(*names):
+            for nm in names:
+                for c in raw.columns:
+                    if str(c).upper().replace(" ", "_") == nm:
+                        v = r.get(c)
+                        if v is not None and not pd.isna(v):
+                            return v
+            return None
+        _v_height  = _col("PRIOR_HEIGHT_FT", "PRIOR_HEIGHT")
+        _v_lot     = _col("LOT_SQFT")
+        _v_src     = _col("SOURCE", "PRIOR_SQFT_SOURCE")
+        _v_coastal = _col("COASTAL_ZONE")
+        _v_hill    = _col("HILLSIDE")
+
         # Lot size drives the EO8 zoning envelope, and Redfin exports carry it.
         # Previously we only used the county's figure, so any lot the county lookup
         # missed had no zoning path at all — which silently suppressed the larger of
@@ -513,6 +613,9 @@ def _gather_facts(raw, addr_col, mkt):
                            prior_sqft=csv_prior, year_built=1960, units=1, use_code="0101")
 
         # county lot size wins; CSV fills the gap
+        if _v_lot is not None:
+            try: p.lot_sqft = float(_v_lot)
+            except Exception: pass
         if csv_lot and not getattr(p, "lot_sqft", None):
             try: p.lot_sqft = csv_lot
             except Exception: pass
@@ -533,6 +636,9 @@ def _gather_facts(raw, addr_col, mkt):
                  lon=(None if pd.isna(lon) else float(lon)),
                  rti=_rti, area_psf=_cost["psf"], area_band=_cost["band"],
                  area_why=_cost["why"],
+                 prior_height_ft=(float(_v_height) if _v_height is not None else None),
+                 area_source=(str(_v_src).upper() if _v_src else None),
+                 verified_coastal=_v_coastal, verified_hillside=_v_hill,
                  Price=(float(price) if (price is not None and not pd.isna(price)) else None),
                  prior_sqft=None, imp_value=None, units=None,
                  Buildable=None, build_basis="", upside=None,
@@ -561,7 +667,11 @@ def _gather_facts(raw, addr_col, mkt):
             # Take the GREATER of the EO1 rebuild envelope and the EO8 zoning
             # envelope. Computing EO1 alone systematically understates lots where a
             # small or single-storey house burned — which are the cheapest to buy.
-            be = jur.best_envelope(p.prior_sqft, lot_sqft=p.lot_sqft)
+            be = jur.best_envelope(
+                p.prior_sqft, lot_sqft=p.lot_sqft,
+                prior_height_ft=(float(_v_height) if _v_height is not None else None),
+                coastal=bool(_v_coastal) if _v_coastal is not None else False,
+                hillside=bool(_v_hill) if _v_hill is not None else False)
             build = be.get("best_sqft")
             upside = be.get("eo1_upside") or be.get("eo8_bonus")
             build_basis = ("EO8 zoning (R1 0.45 FAR)" if be.get("best_path") == "EO8 zoning"
