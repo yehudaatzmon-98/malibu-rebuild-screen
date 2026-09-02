@@ -26,6 +26,11 @@ or it systematically misprices. That is the single most important thing the
 matcher does.
 """
 from __future__ import annotations
+
+# Bumped on every substantive change and rendered in the app footer, so anyone
+# looking at the deployed tool can tell which build it is without trusting a commit
+# log that reads "Add files via upload" twenty times over.
+BUILD = "2026-09-02b · ULA indexed · cliff callsite · sample-path crashes · guide in-app"
 import math
 from dataclasses import dataclass, field
 from typing import Optional
@@ -33,76 +38,115 @@ import pandas as pd
 
 
 # ------------------------------------------------------------------ assumptions
-def ula_tax(sale_price: float, enabled: bool = True) -> dict:
-    """
-    Measure ULA — the LA 'mansion tax'. Missing from the model until now, and it is
-    not small.
+# ULA thresholds as certified for transactions closing after 30 June 2026. They index
+# to Chained CPI every 1 July, so a 2028-29 exit does not face these numbers.
+ULA_BASE_YEAR = 2026
+ULA_BASE_T1 = 5_400_000.0
+ULA_BASE_T2 = 10_900_000.0
+ULA_RATE_1 = 0.040
+ULA_RATE_2 = 0.055
+ULA_INDEX_DEFAULT = 0.025          # Chained CPI, exposed as an assumption
 
-    RATES (thresholds indexed to Chained CPI each 1 July; these are the tiers in
-    force for transactions closing after 30 June 2026):
-        under $5,400,000        0%
-        $5,400,000-$10,899,999  4.0%
-        $10,900,000 and above   5.5%
+
+def ula_thresholds(exit_year: int = ULA_BASE_YEAR,
+                   index_rate: float = ULA_INDEX_DEFAULT) -> tuple:
+    """
+    The ULA tiers that will actually apply at exit, not the ones in force today.
+
+    The thresholds index to Chained CPI each 1 July. Hardcoding the 2026 figures
+    understates them for a 2028-29 sale by roughly 6%, which pushes both the cliff
+    and the dead zone below where they will really sit and overstates the tax drag
+    on exactly the sale prices this fund is underwriting.
+
+        2026   $5,400,000   $10,900,000
+        2029   $5,815,000   $11,738,000   (at 2.5%)
+
+    Indexing is applied from the base year forward and never backward — a sale this
+    year faces this year's numbers.
+    """
+    n = max(0, int(exit_year) - ULA_BASE_YEAR)
+    f = (1 + index_rate) ** n
+    return ULA_BASE_T1 * f, ULA_BASE_T2 * f
+
+
+def ula_tax(sale_price: float, enabled: bool = True,
+            exit_year: int = ULA_BASE_YEAR,
+            index_rate: float = ULA_INDEX_DEFAULT) -> dict:
+    """
+    Measure ULA — the LA transfer tax, and not a small line.
+
+    RATES (thresholds indexed to the exit year, see ula_thresholds):
+        below tier 1              0%
+        tier 1 to tier 2          4.0%
+        tier 2 and above          5.5%
 
     Two things people get wrong, both of which matter here:
 
     1. IT APPLIES TO THE ENTIRE SALE PRICE, not just the slice above the threshold.
-       A $5.4M sale owes $216,000. A $5,399,999 sale owes nothing. That is a cliff,
-       not a ramp, and it is worth real money on exits that land near the line.
+       A sale at the tier-1 threshold owes 4% of everything; a dollar below owes
+       nothing. That is a cliff, not a ramp, and it is worth real money on exits
+       landing near a line.
 
-    2. It is on top of the existing documentary transfer taxes — 0.45% City of LA
-       plus 0.11% County = 0.56% — which apply at every price.
+    2. It sits on top of the existing documentary transfer taxes — 0.45% City plus
+       0.11% County = 0.56% — which apply at any price.
 
-    Seller pays at closing, on gross price, not on gain. Combined with a ~5% broker
-    and closing load, an exit above the threshold really does shed close to 10%.
+    Seller pays at closing, on gross price, not on gain.
 
-    REPEAL RISK, and it cuts our way: the Local Taxpayer Protection Act was certified
-    on 3 May 2026 for the 3 November 2026 statewide ballot. If it passes, ULA is
-    replaced by a 0.05% statewide cap. Our exits are 2028-29, so this is genuinely
-    uncertain — which is why it is a switch, not a hardcode. Model it ON as the
-    conservative case.
+    ON REPEAL — CORRECTED 2 SEPTEMBER 2026. Earlier versions of this model noted the
+    Local Taxpayer Protection Act as certified for the November 2026 ballot and
+    treated repeal as a live possibility. That is no longer true. The measure was
+    WITHDRAWN on 25 June 2026, before qualifying, under a deal between its
+    proponents, the Governor and legislative leaders. It was replaced by ACA 22
+    (Proposition 43), which concerns voter-approval thresholds for local special
+    taxes and does NOT limit real estate transfer taxes. The provisions that might
+    have reached ULA were removed from consideration.
+
+    So ULA should be underwritten as permanent. The toggle remains for sensitivity
+    testing, but turning it off is no longer modelling a plausible outcome.
     """
+    t1, t2 = ula_thresholds(exit_year, index_rate)
     if not sale_price or sale_price <= 0:
-        return dict(rate=0.0, tax=0.0, tier="none", doc_tax=0.0, total=0.0, near_cliff=False)
-    doc = sale_price * 0.0056  # City 0.45% + County 0.11%, applies at any price
+        return dict(rate=0.0, tax=0.0, tier="none", doc_tax=0.0, total=0.0,
+                    near_cliff=False, t1=t1, t2=t2)
+    doc = sale_price * 0.0056
     if not enabled:
         return dict(rate=0.0, tax=0.0, tier="ULA off", doc_tax=doc, total=doc,
-                    near_cliff=False)
-    if sale_price >= 10_900_000:
-        rate, tier = 0.055, "5.5% (over $10.9M)"
-    elif sale_price >= 5_400_000:
-        rate, tier = 0.040, "4% ($5.4M-$10.9M)"
+                    near_cliff=False, t1=t1, t2=t2)
+    if sale_price >= t2:
+        rate, tier = ULA_RATE_2, f"5.5% (over ${t2:,.0f})"
+    elif sale_price >= t1:
+        rate, tier = ULA_RATE_1, f"4% (${t1:,.0f}-${t2:,.0f})"
     else:
-        rate, tier = 0.0, "under $5.4M — exempt"
+        rate, tier = 0.0, f"under ${t1:,.0f} — exempt"
     tax = sale_price * rate
-    # flag exits sitting just over a threshold, where pricing DOWN nets more
-    near = False
-    for thresh, r in ((5_400_000, 0.040), (10_900_000, 0.055)):
-        if thresh <= sale_price <= thresh * (1 + r + 0.005):
-            near = True
+    near = any(t <= sale_price <= t * (1 + r + 0.005)
+               for t, r in ((t1, ULA_RATE_1), (t2, ULA_RATE_2)))
     return dict(rate=rate, tax=round(tax), tier=tier, doc_tax=round(doc),
-                total=round(tax + doc), near_cliff=near)
+                total=round(tax + doc), near_cliff=near, t1=t1, t2=t2)
 
 
-def cliff_advice(sale_price: float) -> Optional[str]:
+def cliff_advice(sale_price: float, exit_year: int = ULA_BASE_YEAR,
+                 index_rate: float = ULA_INDEX_DEFAULT):
     """
-    Where an exit lands just above a ULA threshold, selling for LESS nets MORE,
-    because the tax hits the whole price rather than the excess. Worth surfacing:
-    it is free money and it is easy to miss.
+    Where an exit lands just above a threshold, selling for LESS nets MORE, because
+    the tax hits the whole price rather than the excess. Free money, easy to miss.
     """
-    for thresh, rate in ((5_400_000, 0.040), (10_900_000, 0.055)):
+    t1, t2 = ula_thresholds(exit_year, index_rate)
+    for thresh, rate in ((t1, ULA_RATE_1), (t2, ULA_RATE_2)):
         if thresh <= sale_price <= thresh * (1 + rate + 0.005):
             below = thresh - 1_000
             net_at = sale_price - sale_price * rate
-            net_below = below - (below * 0.055 if below >= 10_900_000 else
-                                 below * 0.040 if below >= 5_400_000 else 0)
+            net_below = below - (below * ULA_RATE_2 if below >= t2 else
+                                 below * ULA_RATE_1 if below >= t1 else 0)
             if net_below > net_at:
                 gain = net_below - net_at
                 return (f"<b>ULA threshold cliff.</b> At ${sale_price:,.0f} the tax is "
-                        f"{rate:.1%} of the <i>whole</i> price (${sale_price*rate:,.0f}). "
-                        f"Pricing at ${below:,.0f} instead nets about "
-                        f"<b>${gain:,.0f} more</b>. The tax is a cliff, not a ramp — "
-                        f"worth designing the exit around.")
+                        f"{rate:.1%} of the <i>whole</i> price "
+                        f"(${sale_price*rate:,.0f}). Pricing at ${below:,.0f} instead "
+                        f"nets about <b>${gain:,.0f} more</b>. The tax is a cliff, not "
+                        f"a ramp — worth designing the exit around."
+                        f"<br><span class='cite'>Threshold shown is the "
+                        f"{exit_year} figure, indexed from the 2026 base.</span>")
     return None
 
 
@@ -160,8 +204,12 @@ class Assumptions:
     # it stays labelled as a bet wherever it appears.
     scarcity_premium: float = 0.00
 
-    # Measure ULA. On by default — real today, and the repeal vote is a coin flip.
+    # Measure ULA. On by default. The repeal path closed on 25 June 2026 when the
+    # Local Taxpayer Protection Act was withdrawn before qualifying, so this is not
+    # a coin flip any more — it is the law we will exit under.
     apply_ula: bool = True
+    exit_year: int = 2028              # thresholds index to Chained CPI each 1 July
+    ula_index_rate: float = 0.025
 
     version: str = "v2.0"
 
@@ -181,7 +229,7 @@ class Assumptions:
              f"{self.build_months:.0f}+{self.sale_months:.0f}mo · "
              f"sell {self.selling_cost_pct:.0%} · appr {self.appreciation_pct:.0%} · "
              f"premium {self.new_build_premium:.0%}"
-             f"{' · ULA on' if self.apply_ula else ' · ULA OFF'}")
+             f"{' · ULA on (' + str(self.exit_year) + ' tiers)' if self.apply_ula else ' · ULA OFF'}")
         if self.scarcity_premium:
             s += f" · SCARCITY BET +{self.scarcity_premium:.0%}"
         return s
@@ -339,7 +387,9 @@ class ProForma:
         premium = premium_measured * (1 + a.scarcity_premium)
         gross_sale = premium * self.buildable_sqft
 
-        _ula = ula_tax(gross_sale, enabled=a.apply_ula)
+        _ula = ula_tax(gross_sale, enabled=a.apply_ula,
+                       exit_year=getattr(a, "exit_year", 2026),
+                       index_rate=getattr(a, "ula_index_rate", 0.025))
         selling = gross_sale * a.selling_cost_pct
         net_sale = gross_sale - selling - _ula["total"]
         profit = net_sale - total_cost
@@ -395,7 +445,10 @@ class ProForma:
         lo, hi = 0.0, total_cost * 4
         for _ in range(60):
             g = (lo + hi) / 2
-            net = g - g * a.selling_cost_pct - ula_tax(g, enabled=a.apply_ula)["total"]
+            net = (g - g * a.selling_cost_pct
+                   - ula_tax(g, enabled=a.apply_ula,
+                             exit_year=getattr(a, "exit_year", 2026),
+                             index_rate=getattr(a, "ula_index_rate", 0.025))["total"])
             if net < total_cost:
                 lo = g
             else:

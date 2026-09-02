@@ -22,7 +22,8 @@ import county
 import jurisdiction as jur
 from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
-from engine import (Assumptions, CompMarket, ProForma, sensitivity,
+import guide
+from engine import (BUILD, Assumptions, CompMarket, ProForma, sensitivity,
                     what_youd_have_to_believe, discount_to_breakeven, path_to_strong)
 from diligence import build_card, card_to_rows
 from coastal import coastal_flag
@@ -94,7 +95,8 @@ _cap = st.sidebar.expander("Capital structure")
 _adv = st.sidebar.expander("Other assumptions")
 
 _assump_kwargs = dict(
-    construction_psf=st.sidebar.number_input("Construction $/sqft (fully loaded)", 400, 2000, 1000, 50),
+    construction_psf=st.sidebar.number_input("Construction $/sqft — fallback only", 400, 2000, 1000, 50,
+        help="Used only where the street is not recognised as Alphabet flats ($700) or hillside ($1,150). Most Palisades lots never touch this number; the per-lot figure is shown on each row."),
     contingency_pct=_adv.slider("Contingency", 0.0, 0.20, 0.08, 0.01),
     carrying_rate=_adv.slider("Carrying rate /yr", 0.0, 0.10, 0.03, 0.005),
     selling_cost_pct=_adv.slider("Selling cost", 0.0, 0.10, 0.05, 0.005),
@@ -107,16 +109,22 @@ _assump_kwargs = dict(
     construction_ltc=_cap.slider("Lender advance on BUILD costs", 0.0, 1.0, 1.00, 0.05,
         help="Construction fully financed in the default structure."),
     loan_rate=_cap.slider("Construction loan rate", 0.05, 0.15, 0.105, 0.005),
-    build_months=st.sidebar.slider("Build months", 10, 36, 18, 1,
+    build_months=st.sidebar.slider("Build months", 10, 42, 30, 1,
         help="Two Palisades builds pulled from LADBS ran 34 and 35 months. "
              "18 is the base case; slide it to see the cost of a longer schedule."),
     ae_pct=_adv.slider("Architecture & engineering", 0.0, 0.12, 0.05, 0.01),
     apply_ula=_adv.checkbox(
         "Apply Measure ULA (mansion tax)", value=True,
-        help="4% on LA city sales $5.4M-$10.9M, 5.5% above, on the WHOLE price, paid by "
-             "the seller. Plus 0.56% documentary transfer tax at any price. A repeal "
-             "measure is on the Nov 2026 ballot, so it may not survive to our exit — but "
-             "model it on as the conservative case."),
+        help="4% and 5.5% on LA city sales above the tiers, on the WHOLE price, paid "
+             "by the seller, plus 0.56% documentary transfer tax at any price. "
+             "Thresholds index to Chained CPI each 1 July, so the tiers at a 2028-29 "
+             "exit are materially higher than today's. NOTE: the repeal measure was "
+             "withdrawn on 25 June 2026 before qualifying and was replaced by a "
+             "measure that does not touch transfer taxes — so ULA should be "
+             "underwritten as permanent."),
+    exit_year=_adv.number_input("Exit year (sets the ULA tier)", 2026, 2035, 2028, 1,
+        help="Thresholds index each 1 July. A 2029 exit faces roughly $5.82M and "
+             "$11.74M rather than $5.4M and $10.9M."),
     scarcity_premium=_adv.slider(
         "SCARCITY BET — extra exit premium", 0.0, 0.40, 0.00, 0.05,
         help="The 2028-29 thesis: a rebuilt, supply-constrained Palisades sells above "
@@ -141,6 +149,7 @@ if getattr(a, "scarcity_premium", 0):
                        f"Base case is this slider at 0.")
 
 st.sidebar.markdown("### Negotiation scenario")
+guide.render_guide_drawer()
 st.sidebar.caption("Off by default. The ranking above is priced at full asking — the "
                    "conservative floor. Slide this to see who survives a typical discount, "
                    "as a scenario, not the default.")
@@ -339,7 +348,7 @@ mkt = CompMarket(comps_df)
 # accumulate across the session and export as a CSV that feeds straight back in.
 _vault = st.session_state.setdefault("_verified_records", {})
 
-with st.expander(f"Verified records — paste a Certificate of Occupancy  "
+with st.expander(f"Verified records — upload or paste a Certificate of Occupancy  "
                  f"({len(_vault)} on file)"):
     st.markdown(
         '<span class="cite">Open the property on LADBS, click <b>Certificate of '
@@ -806,7 +815,9 @@ def _score(f, a_, discount_):
     row["Why"] = (f"{build:,.0f} sf ({f['build_basis']}){up} @ ${basis:,.0f}/sf comp basis "
                   f"(range {rr['low']['roc']:.0%}–{rr['high']['roc']:.0%}){scen}{tagstr}. "
                   f"{row['_breakeven']}")
-    row["_cliff"] = cliff_advice(rr["base"]["gross_sale"])
+    row["_cliff"] = cliff_advice(rr["base"]["gross_sale"],
+                                 exit_year=getattr(a_, "exit_year", 2026),
+                                 index_rate=getattr(a_, "ula_index_rate", 0.025))
 
     # ---- margin over market: the metric that actually separates lots ----
     # Solve the exit price at which this lot returns exactly zero, then compare it
@@ -906,10 +917,10 @@ def render_detail(x, f, a, discount, overrides):
     table answers "which lots"; this answers "is this the one".
     """
 
-    st.markdown(
-        f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
-        f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
-        unsafe_allow_html=True)
+    # The header card is rendered by the caller immediately above this call, with the
+    # margin tier line the version here lacked. This block was a leftover duplicate
+    # from that refactor and referenced `css` and `bits`, which are local to the
+    # scoring loop and undefined here — a NameError on every property opened.
 
     # the per-lot facts live on the row. `f` from the scoring loop is NOT in scope
     # here — reading it directly crashed on the first row that had none (the blank
@@ -928,7 +939,7 @@ def render_detail(x, f, a, discount, overrides):
         with st.expander("Underwrite this deal — waterfall, structures, what breaks it"):
             _sq, _ld = float(x.Buildable), float(x.Price)
             _basis = (f.get("comp_basis") or 0)
-            _mm2 = x.get("_margin") or {}
+            _mm2 = (x.get("_margin") if isinstance(x.get("_margin"), dict) else {})
             _median = _mm2.get("median") or _basis
             _exit = st.number_input(
                 "Exit price to underwrite ($/sf)", 500, 6000,
@@ -1206,7 +1217,7 @@ _view = df[~df.Address.astype(str).str.strip().str.lower().isin(["nan", "none", 
 
 
 def _table_row(x):
-    mm = x.get("_margin") or {}
+    mm = (x.get("_margin") if isinstance(x.get("_margin"), dict) else {})
     v = x.get("_verified")
     return {
         "★": x.Address in shortlist,
@@ -1233,10 +1244,11 @@ st.markdown('<span class="cite">Sorted by margin over market — how far above t
             'Pick one below for the full underwriting.</span>', unsafe_allow_html=True)
 
 if len(_table):
+    guide.render_margin_legend()
     _edited = st.data_editor(
         _table, use_container_width=True, hide_index=True, key="results_table",
         disabled=[c for c in _table.columns if c != "★"],
-        column_config={
+        column_config=guide.apply_column_help({
             "★": st.column_config.CheckboxColumn("★", width="small",
                                                  help="Add to the short list"),
             "Margin over market": st.column_config.TextColumn(
@@ -1245,7 +1257,7 @@ if len(_table):
             "Verified": st.column_config.TextColumn(
                 help="Whether the prior square footage comes from a Certificate of "
                      "Occupancy or original permit rather than a sheet or listing."),
-        })
+        }))
     if _edited is not None and "★" in _edited.columns:
         for _i, _r in _edited.iterrows():
             if _r["★"]:
@@ -1264,7 +1276,7 @@ if _choices:
     if len(_sel):
         x = _sel.iloc[0]
         f = x.get("_f") or {}
-        mm = x.get("_margin") or {}
+        mm = (x.get("_margin") if isinstance(x.get("_margin"), dict) else {})
         _css = ("card card-strong" if x.Signal == "STRONG"
                 else "card card-pass" if x.Signal == "PASS" else "card")
         _bits = [f"{x.Jurisdiction}"]
@@ -1384,3 +1396,6 @@ with c2:
                            "diligence_worksheet.csv", "text/csv",
                            help="One row per check, kill-ordered, with blank columns for "
                                 "Michael to fill in and hand back to Tal.")
+
+st.markdown("---")
+st.caption(f"Build {BUILD}")
