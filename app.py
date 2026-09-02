@@ -29,8 +29,7 @@ from coastal import coastal_flag
 from verification import (Verified, margin_over_market, rank_score,
                           confidence_note, ladbs_links)
 from cofo_parser import parse_cofo, parse_cofo_pdf, to_csv_row
-from underwrite import (waterfall, compare_structures, hold_sensitivity,
-                        what_breaks_it, sensitivity_grid)
+from underwrite import (waterfall, compare_structures, what_breaks_it, offer_grid)
 from construction import area_construction_cost
 from engine import ula_tax, cliff_advice
 
@@ -992,14 +991,35 @@ def render_detail(x, f, a, discount, overrides):
                     f'(<b>{_t["delta"]*100:+.0f} points</b>)<br>{_t["note"]}'
                     f'</span></div>', unsafe_allow_html=True)
 
-            st.markdown("**Schedule**")
-            st.dataframe(pd.DataFrame([{
-                "Build months": h["build_months"],
-                "Interest": f"${h['interest']:,.0f}",
-                "Total cost": f"${h['total_cost']:,.0f}",
-                "ROC": f"{h['roc']:.0%}",
-            } for h in hold_sensitivity(_sq, _ld, _exit, f["jcode"], _base_a)]),
-                use_container_width=True, hide_index=True)
+            st.markdown("**What to offer**")
+            _g = offer_grid(_sq, _ld, f["jcode"], _base_a, comp_median=_median)
+            _cols = {"Offer": []}
+            for _e in _g["exits"]:
+                _cols[f"${_e:,.0f}/sf"] = []
+            for _r in _g["rows"]:
+                _cols["Offer"].append(
+                    f"${_r['offer']:,.0f}" + (f"  -{_r['discount']:.0%}"
+                                              if _r["discount"] else "  (ask)"))
+                for _e, _c in zip(_g["exits"], _r["cells"]):
+                    _cols[f"${_e:,.0f}/sf"].append(f"{_c['roc']:.0%}")
+            st.dataframe(pd.DataFrame(_cols), use_container_width=True, hide_index=True)
+            _md_col = f"${_g['exits'][1]:,.0f}/sf"
+            st.markdown(
+                f'<span class="cite">Rows are what you offer, the one variable you '
+                f'control. Columns are what the market does, the one you control least. '
+                f'<b>{_md_col} is the comparable median</b> - where the market is now, '
+                f'not where the deal needs it to be. Pick the column you actually '
+                f'believe and read down to the first offer that clears.<br><br>'
+                + (f'At the asking price this clears 20% once the market reaches '
+                   f'<b>${_g["needed_exit"]:,.0f}/sf</b>. '
+                   if _g["needed_exit"] else "")
+                + (f'If the market only delivers its median, the offer has to come down '
+                   f'<b>{_g["needed_discount"]:.0%}</b>.'
+                   if _g["needed_discount"] is not None else
+                   '<b>At the median exit no realistic discount on the land clears the '
+                   'target</b> - the return is driven by build cost against exit price, '
+                   'not by what you pay for the dirt.')
+                + '</span>', unsafe_allow_html=True)
 
     # ---- what the economics actually rest on ----
     _v = x.get("_verified")

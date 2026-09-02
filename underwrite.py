@@ -119,6 +119,53 @@ def compare_structures(buildable_sqft: float, land_cost: float, exit_psf: float,
     return rows
 
 
+def offer_grid(buildable_sqft: float, ask: float, jurisdiction: str,
+               base: Assumptions, comp_median: float,
+               target_roc: float = 0.20) -> dict:
+    """
+    THE DECISION TABLE — what to offer.
+
+    Replaces three separate sensitivity views (exit x construction, hold length,
+    and the nine-column scenario block) with the one question actually being asked
+    at the point of writing an offer:
+
+        Given what the market might do, what can I pay?
+
+    Rows are the offer price, which is the only variable on this list the buyer
+    controls. Columns are the exit price, which is the one they control least and
+    which moves the return most. The comparable median is marked, because that is
+    where the market is now rather than where the deal needs it to be.
+
+    Read it by choosing the column you actually believe, then running down to the
+    first offer that clears. That number is the bid.
+    """
+    exits = [comp_median * m for m in (0.90, 1.0, 1.15, 1.30, 1.45)]
+    discounts = (0.0, 0.05, 0.10, 0.15, 0.20, 0.25)
+    rows = []
+    for d in discounts:
+        offer = ask * (1 - d)
+        cells = []
+        for e in exits:
+            pf = ProForma(buildable_sqft, offer, e, jurisdiction, base, express=False)
+            r = pf._run_one(e)
+            cells.append(dict(exit_psf=e, roc=r["roc"], coc=r["coc"],
+                              clears=r["roc"] >= target_roc,
+                              profit=r["profit"]))
+        rows.append(dict(discount=d, offer=offer, cells=cells))
+
+    # the lowest exit price at which the asking price still clears the target
+    at_ask = rows[0]["cells"]
+    needed_exit = next((c["exit_psf"] for c in at_ask if c["clears"]), None)
+    # the offer needed if the market only delivers its own median
+    at_median = [r["cells"][1] for r in rows]
+    needed_discount = next((rows[i]["discount"] for i, c in enumerate(at_median)
+                            if c["clears"]), None)
+
+    return dict(exits=exits, rows=rows, comp_median=comp_median,
+                target_roc=target_roc, needed_exit=needed_exit,
+                needed_discount=needed_discount, ask=ask)
+
+
 # ------------------------------------------------------------ sensitivity
 def sensitivity_grid(buildable_sqft: float, land_cost: float, jurisdiction: str,
                      base: Assumptions,
