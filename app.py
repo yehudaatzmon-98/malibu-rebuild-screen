@@ -84,34 +84,41 @@ def sig_stamp(s):
 # in the sidebar and visible without scrolling anything.
 _sl_slot = st.sidebar.container()
 
-st.sidebar.markdown("### The yardstick")
-st.sidebar.caption("Fixed assumptions. Move one and every lot re-scores together.")
+st.sidebar.markdown("### The two that matter")
+st.sidebar.caption("Construction cost and exit price move the answer roughly five "
+                   "times more than anything else below. Everything is a slider, but "
+                   "these are the ones to think about.")
 # Build the yardstick. Guard against a stale engine.py: if only one of the two files
 # has been updated, an unknown keyword would otherwise kill the whole app before it
 # renders anything. Better to run with the feature disabled and say so.
+_cap = st.sidebar.expander("Capital structure")
+_adv = st.sidebar.expander("Other assumptions")
+
 _assump_kwargs = dict(
     construction_psf=st.sidebar.number_input("Construction $/sqft (fully loaded)", 400, 2000, 1000, 50),
-    contingency_pct=st.sidebar.slider("Contingency", 0.0, 0.20, 0.08, 0.01),
-    carrying_rate=st.sidebar.slider("Carrying rate /yr", 0.0, 0.10, 0.03, 0.005),
-    selling_cost_pct=st.sidebar.slider("Selling cost", 0.0, 0.10, 0.05, 0.005),
-    appreciation_pct=st.sidebar.slider("Appreciation /yr", -0.05, 0.10, 0.03, 0.005),
-    new_build_premium=st.sidebar.slider("New-build premium", 0.0, 0.30, 0.10, 0.01),
-    land_ltv=st.sidebar.slider("Lender advance on LAND", 0.0, 0.80, 0.50, 0.05,
+    contingency_pct=_adv.slider("Contingency", 0.0, 0.20, 0.08, 0.01),
+    carrying_rate=_adv.slider("Carrying rate /yr", 0.0, 0.10, 0.03, 0.005),
+    selling_cost_pct=_adv.slider("Selling cost", 0.0, 0.10, 0.05, 0.005),
+    appreciation_pct=_adv.slider("Appreciation /yr", -0.05, 0.10, 0.03, 0.005,
+        help="Observed Palisades drift is about 1.5%/yr. 3% is already optimistic."),
+    new_build_premium=_adv.slider("New-build premium", 0.0, 0.30, 0.10, 0.01,
+        help="Measured at 19-26% size-controlled from 1,036 Palisades sales."),
+    land_ltv=_cap.slider("Lender advance on LAND", 0.0, 0.80, 0.50, 0.05,
         help="Tal's structure is 50% down on the land, i.e. a 50% advance."),
-    construction_ltc=st.sidebar.slider("Lender advance on BUILD costs", 0.0, 1.0, 1.00, 0.05,
+    construction_ltc=_cap.slider("Lender advance on BUILD costs", 0.0, 1.0, 1.00, 0.05,
         help="Construction fully financed in the default structure."),
-    loan_rate=st.sidebar.slider("Construction loan rate", 0.05, 0.15, 0.105, 0.005),
+    loan_rate=_cap.slider("Construction loan rate", 0.05, 0.15, 0.105, 0.005),
     build_months=st.sidebar.slider("Build months", 10, 36, 18, 1,
         help="Two Palisades builds pulled from LADBS ran 34 and 35 months. "
              "18 is the base case; slide it to see the cost of a longer schedule."),
-    ae_pct=st.sidebar.slider("Architecture & engineering", 0.0, 0.12, 0.05, 0.01),
-    apply_ula=st.sidebar.checkbox(
+    ae_pct=_adv.slider("Architecture & engineering", 0.0, 0.12, 0.05, 0.01),
+    apply_ula=_adv.checkbox(
         "Apply Measure ULA (mansion tax)", value=True,
         help="4% on LA city sales $5.4M-$10.9M, 5.5% above, on the WHOLE price, paid by "
              "the seller. Plus 0.56% documentary transfer tax at any price. A repeal "
              "measure is on the Nov 2026 ballot, so it may not survive to our exit — but "
              "model it on as the conservative case."),
-    scarcity_premium=st.sidebar.slider(
+    scarcity_premium=_adv.slider(
         "SCARCITY BET — extra exit premium", 0.0, 0.40, 0.00, 0.05,
         help="The 2028-29 thesis: a rebuilt, supply-constrained Palisades sells above "
              "what today's comps imply. Zero by default because it is a forecast, not "
@@ -860,342 +867,406 @@ if getattr(a, "scarcity_premium", 0):
              f"roughly flat, so this is an argument to be made, not a measurement. "
              f"Set the slider to 0 for the defensible base case.")
 
-with st.expander("What to do with this list  →  read me first", expanded=True):
+with st.expander("How to use this list", expanded=False):
     st.markdown("""
-**The list is sorted by profit — the best opportunities are at the top.** Here's how to
-turn it into a short list of lots worth pursuing:
+**The table is the screen. The panel below it is the decision.**
 
-**Step 1 — Start at the top.** The STRONG and BUY lots clear the return bar at the
-current asking price. Those are the ones worth acting on. MAYBE is marginal; PASS
-loses money — you can ignore those for now.
+**1 · Read the table.** One row per lot, sorted by *margin over market* — how far
+above the comparable median a lot has to sell just to break even. Negative is margin
+in your favour before the market has to move at all. Click any header to re-sort.
 
-**Step 2 — Open each top lot's diligence checklist** (click *"Diligence — what to
-verify"* under any lot). It lists the 4–5 things to confirm before the lot is real,
-in order of what's most likely to kill the deal — starting with "is the prior square
-footage real" and ending with "call the agent." Each item says exactly where to get
-the answer.
+**2 · Check the Verified column.** "no" means the prior square footage came from a
+sheet or a listing rather than a Certificate of Occupancy. Every unverified figure
+we have checked was wrong, and always overstated — so an unverified lot near the top
+is a lot to verify, not a lot to buy.
 
-**Step 3 — Note the walk-away number.** Every lot shows the discount it needs to clear
-the bar (e.g. *"clears 20% at full asking, room to overpay 83%"*). That's the number
-to hold in your head before you call — if the seller won't get near it, move on.
+**3 · Tick ★** on anything worth keeping. The short list collects in the sidebar and
+downloads with the numbers attached.
 
-**Step 4 — Star the ones worth keeping.** Tick the **★** next to any lot and it collects
-in the **short list in the left sidebar**, which stays visible while you scroll. From
-there you can download two things: the short list itself (with the numbers and your
-walk-away price), and the diligence checklist for just those lots.
+**4 · Pick one property below** for the full underwriting: the waterfall and what the
+investor actually receives, whether leverage helps this specific deal, and which
+assumption ends it if it's wrong.
 
-**Step 5 — Report back.** The lots that survive the checklist — prior sqft confirmed,
-seller willing to deal, no hidden killer — are the ones that go to the partners for a
-real look. That's how ~130 becomes the 5 worth an offer.
+**5 · Upload Certificates of Occupancy** as you pull them (the panel at the top).
+Each one you add makes the ranking more honest and moves that lot to "verified".
     """)
 
 shortlist = st.session_state.setdefault("_shortlist", set())
 
-for _, x in df.iterrows():
-    _addr = str(x.Address or "").strip()
-    if not _addr or _addr.lower() in ("nan", "none"):
-        continue
-    css = "card"
-    if x.Signal == "STRONG": css = "card card-strong"
-    elif x.Signal == "PASS": css = "card card-pass"
-    elif x.Signal in ("NO COMPS","NEED PRICE","NEED PRIOR SF","NO DATA","—"): css = "card card-none"
-    bits = [f"{x.Jurisdiction}"]
-    if pd.notna(x.Price): bits.append(f"${x.Price:,.0f} ask")
-    if pd.notna(x.Buildable): bits.append(f"{x.Buildable:,.0f} sf buildable")
-    if pd.notna(x.ROC): bits.append(f"<b>{x.ROC:.0%} ROC</b>")
-    be = x.get("_breakeven")
-    if be: bits.append(f'<b>{be}</b>')
-    _mm = x.get("_margin")
-    if _mm:
-        _col = {"STRONG":"#1f5c2e","GOOD":"#1f5c2e","TIGHT":"#8a5a00",
-                "STRETCH":"#8a5a00","NO":"#7a2518"}.get(_mm["tier"], "#55524a")
-        bits.insert(0, f'<b style="color:{_col}">{_mm["tier"]} · '
-                       f'breakeven ${_mm["breakeven"]:,}/sf vs market ${_mm["median"]:,} '
-                       f'({_mm["margin"]:+.0%})</b>')
 
-    # Tal: "I find a property I like. How do I export it? I don't want to write it down."
-    keep_col, card_col = st.columns([1, 22])
-    with keep_col:
-        keep = st.checkbox("★", key=f"keep_{x.Address}",
-                           value=(x.Address in shortlist),
-                           help="Save this lot to your short list (shown in the sidebar)")
-    if keep:
-        shortlist.add(x.Address)
-    else:
-        shortlist.discard(x.Address)
-    with card_col:
-        st.markdown(
-            f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
-            f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
-            unsafe_allow_html=True)
+def render_detail(x, f, a, discount, overrides):
+    """
+    Everything about ONE lot, full width.
 
-        # the per-lot facts live on the row. `f` from the scoring loop is NOT in scope
-        # here — reading it directly crashed on the first row that had none (the blank
-        # "nan" row from a trailing line in the CSV).
-        f = x.get("_f") or {}
+    Previously each of these blocks rendered as a collapsed expander beneath every
+    row. Six panels across 130 lots is nearly 800 collapsed elements on a single
+    page: slow to render, and impossible to navigate because the thing you need
+    looks identical to five things you don't.
 
-        # ---- ULA threshold cliff: selling for less can net more ----
-        if x.get("_cliff"):
-            st.markdown(f'<div class="card card-warn">{x["_cliff"]}</div>',
+    Screening and underwriting are different jobs and now have different views. The
+    table answers "which lots"; this answers "is this the one".
+    """
+
+    st.markdown(
+        f'<div class="{css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b><br>'
+        f'<span class="cite">{" · ".join(bits)}<br>{x.Why}</span></div>',
+        unsafe_allow_html=True)
+
+    # the per-lot facts live on the row. `f` from the scoring loop is NOT in scope
+    # here — reading it directly crashed on the first row that had none (the blank
+    # "nan" row from a trailing line in the CSV).
+    f = x.get("_f") or {}
+
+    # ---- ULA threshold cliff: selling for less can net more ----
+    if x.get("_cliff"):
+        st.markdown(f'<div class="card card-warn">{x["_cliff"]}</div>',
+                    unsafe_allow_html=True)
+    # ---- SECOND STAGE: the full underwriting on one chosen deal ----
+    # The ranking above is a sorting job. This is the step after: what the
+    # investor actually receives, what leverage does in both directions, and
+    # which assumption ends the deal if it is wrong.
+    if x.get("_pf") is not None and pd.notna(x.Buildable) and pd.notna(x.Price):
+        with st.expander("Underwrite this deal — waterfall, structures, what breaks it"):
+            _sq, _ld = float(x.Buildable), float(x.Price)
+            _basis = (f.get("comp_basis") or 0)
+            _mm2 = x.get("_margin") or {}
+            _median = _mm2.get("median") or _basis
+            _exit = st.number_input(
+                "Exit price to underwrite ($/sf)", 500, 6000,
+                int(round(_basis or 1700)), 50, key=f"uw_exit_{x.Address}",
+                help="Defaults to the matched comp basis. The market median for "
+                     "this street and size band is shown below for reference.")
+            st.markdown(f'<span class="cite">Comparable median '
+                        f'<b>${_median:,.0f}/sf</b> · this lot breaks even at '
+                        f'<b>${x.get("_breakeven_psf", 0):,.0f}/sf</b></span>',
                         unsafe_allow_html=True)
-        # ---- SECOND STAGE: the full underwriting on one chosen deal ----
-        # The ranking above is a sorting job. This is the step after: what the
-        # investor actually receives, what leverage does in both directions, and
-        # which assumption ends the deal if it is wrong.
-        if x.get("_pf") is not None and pd.notna(x.Buildable) and pd.notna(x.Price):
-            with st.expander("Underwrite this deal — waterfall, structures, what breaks it"):
-                _sq, _ld = float(x.Buildable), float(x.Price)
-                _basis = (f.get("comp_basis") or 0)
-                _mm2 = x.get("_margin") or {}
-                _median = _mm2.get("median") or _basis
-                _exit = st.number_input(
-                    "Exit price to underwrite ($/sf)", 500, 6000,
-                    int(round(_basis or 1700)), 50, key=f"uw_exit_{x.Address}",
-                    help="Defaults to the matched comp basis. The market median for "
-                         "this street and size band is shown below for reference.")
-                st.markdown(f'<span class="cite">Comparable median '
-                            f'<b>${_median:,.0f}/sf</b> · this lot breaks even at '
-                            f'<b>${x.get("_breakeven_psf", 0):,.0f}/sf</b></span>',
-                            unsafe_allow_html=True)
 
-                _base_a = Assumptions(**{**a.__dict__,
-                                         "construction_psf": float(
-                                             f.get("area_psf") or a.construction_psf)})
-                _pf2 = ProForma(_sq, _ld, _exit, f["jcode"], _base_a, express=False)
-                _r2 = _pf2._run_one(_exit)
-                _w = waterfall(_r2["profit"], _r2["equity"],
-                               months=_base_a.total_months)
+            _base_a = Assumptions(**{**a.__dict__,
+                                     "construction_psf": float(
+                                         f.get("area_psf") or a.construction_psf)})
+            _pf2 = ProForma(_sq, _ld, _exit, f["jcode"], _base_a, express=False)
+            _r2 = _pf2._run_one(_exit)
+            _w = waterfall(_r2["profit"], _r2["equity"],
+                           months=_base_a.total_months)
 
-                st.markdown("**What the investor receives**")
+            st.markdown("**What the investor receives**")
+            st.markdown(
+                f'<div class="card"><span class="cite">'
+                f'Total project cost <b>${_r2["total_cost"]:,.0f}</b> · '
+                f'equity <b>${_r2["equity"]:,.0f}</b> · '
+                f'profit <b>${_r2["profit"]:,.0f}</b><br><br>'
+                f'<b>LP</b> — puts in ${_w["lp_capital"]:,.0f}, receives '
+                f'${_w["lp_total"]:,.0f}. <b>{_w["lp_multiple"]:.2f}x</b> over '
+                f'{_base_a.total_months:.0f} months, roughly '
+                f'<b>{_w["lp_irr"]:.0%} IRR</b>.<br>'
+                f'<b>GP</b> — puts in ${_w["gp_capital"]:,.0f}, receives '
+                f'${_w["gp_total"]:,.0f} (<b>{_w["gp_multiple"]:.1f}x</b>).<br><br>'
+                f'<b>Effective promote {_w["effective_promote"]:.0%}.</b> A 50% '
+                f'profit share on 10% of the capital. Normal for a friends-and-'
+                f'family single asset; institutions expect roughly 20% over a '
+                f'preferred return at fund stage. And note losses follow capital, '
+                f'not the split — on a loss the LP wears 90%, because the GP\'s '
+                f'50% is upside only.</span></div>', unsafe_allow_html=True)
+
+            st.markdown("**Does leverage help this deal?**")
+            _rows = compare_structures(_sq, _ld, _exit, f["jcode"], _base_a,
+                                       downside_psf=_median)
+            st.dataframe(pd.DataFrame([{
+                "Structure": s["name"],
+                "Equity in": f"${s['equity']:,.0f}",
+                "Breakeven $/sf": f"${s['breakeven']:,.0f}",
+                f"CoC @ ${_exit:,}": f"{s['coc']:.0%}",
+                f"CoC @ ${_median:,.0f}": f"{s.get('down_coc', 0):.0%}",
+            } for s in _rows]), use_container_width=True, hide_index=True)
+            st.markdown('<span class="cite">The breakeven barely moves across '
+                        'structures — it is the same project cost either way. '
+                        'Leverage changes who earns the profit and how hard a miss '
+                        'lands, not whether the deal works.</span>',
+                        unsafe_allow_html=True)
+
+            st.markdown("**What breaks it** — ranked by damage")
+            for _t in what_breaks_it(_sq, _ld, _exit, f["jcode"], _base_a):
                 st.markdown(
                     f'<div class="card"><span class="cite">'
-                    f'Total project cost <b>${_r2["total_cost"]:,.0f}</b> · '
-                    f'equity <b>${_r2["equity"]:,.0f}</b> · '
-                    f'profit <b>${_r2["profit"]:,.0f}</b><br><br>'
-                    f'<b>LP</b> — puts in ${_w["lp_capital"]:,.0f}, receives '
-                    f'${_w["lp_total"]:,.0f}. <b>{_w["lp_multiple"]:.2f}x</b> over '
-                    f'{_base_a.total_months:.0f} months, roughly '
-                    f'<b>{_w["lp_irr"]:.0%} IRR</b>.<br>'
-                    f'<b>GP</b> — puts in ${_w["gp_capital"]:,.0f}, receives '
-                    f'${_w["gp_total"]:,.0f} (<b>{_w["gp_multiple"]:.1f}x</b>).<br><br>'
-                    f'<b>Effective promote {_w["effective_promote"]:.0%}.</b> A 50% '
-                    f'profit share on 10% of the capital. Normal for a friends-and-'
-                    f'family single asset; institutions expect roughly 20% over a '
-                    f'preferred return at fund stage. And note losses follow capital, '
-                    f'not the split — on a loss the LP wears 90%, because the GP\'s '
-                    f'50% is upside only.</span></div>', unsafe_allow_html=True)
-
-                st.markdown("**Does leverage help this deal?**")
-                _rows = compare_structures(_sq, _ld, _exit, f["jcode"], _base_a,
-                                           downside_psf=_median)
-                st.dataframe(pd.DataFrame([{
-                    "Structure": s["name"],
-                    "Equity in": f"${s['equity']:,.0f}",
-                    "Breakeven $/sf": f"${s['breakeven']:,.0f}",
-                    f"CoC @ ${_exit:,}": f"{s['coc']:.0%}",
-                    f"CoC @ ${_median:,.0f}": f"{s.get('down_coc', 0):.0%}",
-                } for s in _rows]), use_container_width=True, hide_index=True)
-                st.markdown('<span class="cite">The breakeven barely moves across '
-                            'structures — it is the same project cost either way. '
-                            'Leverage changes who earns the profit and how hard a miss '
-                            'lands, not whether the deal works.</span>',
-                            unsafe_allow_html=True)
-
-                st.markdown("**What breaks it** — ranked by damage")
-                for _t in what_breaks_it(_sq, _ld, _exit, f["jcode"], _base_a):
-                    st.markdown(
-                        f'<div class="card"><span class="cite">'
-                        f'<b>{_t["factor"]}</b> → return on cost {_t["roc"]:.0%} '
-                        f'(<b>{_t["delta"]*100:+.0f} points</b>)<br>{_t["note"]}'
-                        f'</span></div>', unsafe_allow_html=True)
-
-                st.markdown("**Schedule**")
-                st.dataframe(pd.DataFrame([{
-                    "Build months": h["build_months"],
-                    "Interest": f"${h['interest']:,.0f}",
-                    "Total cost": f"${h['total_cost']:,.0f}",
-                    "ROC": f"{h['roc']:.0%}",
-                } for h in hold_sensitivity(_sq, _ld, _exit, f["jcode"], _base_a)]),
-                    use_container_width=True, hide_index=True)
-
-        # ---- what the economics actually rest on ----
-        _v = x.get("_verified")
-        if _v is not None:
-            _css = "card" if _v.is_verified else "card card-warn"
-            st.markdown(f'<div class="{_css}"><span class="cite">'
-                        f'{confidence_note(_v, f.get("jcode","CITY_OF_LA"))}'
-                        f'</span></div>', unsafe_allow_html=True)
-            if not _v.is_verified:
-                with st.expander("How to verify this in ten minutes (free)"):
-                    for step, detail in ladbs_links(x.Address).items():
-                        st.markdown(f'<span class="cite"><b>{step}</b> — {detail}</span>',
-                                    unsafe_allow_html=True)
-
-        # ---- which legal path gives the bigger house ----
-        _env = f.get("envelope")
-        if _env and _env.get("eo1_base") and _env.get("eo8_base"):
-            _e1, _e8 = _env["eo1_base"], _env["eo8_base"]
-            _win = "EO8 zoning" if _e8 > _e1 else "EO1 rebuild"
-            with st.expander(f"Which path gives the bigger house? → {_win}"):
-                st.markdown(
-                    f'<div class="card"><span class="cite">'
-                    f'<b>EO1 like-for-like:</b> {_e1:,} sf — rebuild what burned, '
-                    f'footprint and height both capped at 110%.<br>'
-                    f'<b>EO8 zoning-compliant:</b> {_e8:,} sf base, '
-                    f'{_env.get("eo8_bonus", 0):,} sf with the 20% design bonus — the '
-                    f'prior structure is not the ceiling, LAMC zoning is. Bypasses local '
-                    f'Coastal Act and CEQA review.<br><br>'
-                    f'<b>Underwritten on the larger: {max(_e1,_e8):,} sf via {_win}.</b>'
-                    f'{"<br><br>" + _env["note"] if _env.get("note") else ""}'
+                    f'<b>{_t["factor"]}</b> → return on cost {_t["roc"]:.0%} '
+                    f'(<b>{_t["delta"]*100:+.0f} points</b>)<br>{_t["note"]}'
                     f'</span></div>', unsafe_allow_html=True)
 
-        if f.get("area_band") in ("alphabet-flats", "hillside"):
-            st.markdown(f'<div class="card"><span class="cite"><b>Construction cost '
-                        f'${f["area_psf"]:,.0f}/sf</b> — {f["area_why"]}</span></div>',
-                        unsafe_allow_html=True)
-        if f.get("rti"):
-            st.markdown('<div class="card"><span class="cite"><b>Listing mentions RTI / '
-                        'approved plans.</b> Shovel-ready means review is already cleared — '
-                        'lower soft cost and a shorter carry, both modelled here as a '
-                        'shorter hold. <b>Verify the permits are current and transfer</b>: '
-                        'RTI status can lapse and permits have their own clocks. Get the '
-                        'stamped set as a condition of purchase.</span></div>',
-                        unsafe_allow_html=True)
+            st.markdown("**Schedule**")
+            st.dataframe(pd.DataFrame([{
+                "Build months": h["build_months"],
+                "Interest": f"${h['interest']:,.0f}",
+                "Total cost": f"${h['total_cost']:,.0f}",
+                "ROC": f"{h['roc']:.0%}",
+            } for h in hold_sensitivity(_sq, _ld, _exit, f["jcode"], _base_a)]),
+                use_container_width=True, hide_index=True)
 
-        # ---- Coastal Commission exposure (Palisades) ----
-        _cf = coastal_flag(f.get("jcode"), f.get("lat"), f.get("lon"), x.Address,
-                           over_envelope=bool(f.get("upside")))
-        if _cf and _cf["tier"] in ("HIGH", "LIKELY", "UNKNOWN"):
-            _lbl = {"HIGH": "Coastal Commission — HIGH exposure, check before offering",
-                    "LIKELY": "Coastal Zone likely — worth a 2-minute check",
-                    "UNKNOWN": "Coastal Zone status unknown"}[_cf["tier"]]
-            with st.expander(_lbl):
-                st.markdown(f'<div class="card card-warn">{_cf["note"]}</div>',
-                            unsafe_allow_html=True)
-
-        # ---- "what would make this a STRONG buy?" — solved, not guessed ----
-        pf_row = x.get("_pf")
-        if pf_row is not None and x.Signal in ("BUY", "MAYBE", "PASS"):
-            pts = path_to_strong(pf_row)
-            if pts.get("ok") and not pts.get("already"):
-                reach = [L for L in pts["levers"] if L.get("reachable")]
-                miss = [L for L in pts["levers"] if not L.get("reachable")]
-                head = (f"What would make this a STRONG buy? "
-                        f"(now {pts['current_roc']:.0%}, needs {pts['target_roc']:.0%})")
-                with st.expander(head):
-                    if reach:
-                        st.markdown('<span class="cite">Any <b>one</b> of these on its own '
-                                    'gets you there — everything else held as-is:</span>',
-                                    unsafe_allow_html=True)
-                        for L in reach:
-                            st.markdown(
-                                f'<div class="card"><b>{L["label"]}</b> — '
-                                f'<span class="cite">{L["phrase"]}</span></div>',
+    # ---- what the economics actually rest on ----
+    _v = x.get("_verified")
+    if _v is not None:
+        _css = "card" if _v.is_verified else "card card-warn"
+        st.markdown(f'<div class="{_css}"><span class="cite">'
+                    f'{confidence_note(_v, f.get("jcode","CITY_OF_LA"))}'
+                    f'</span></div>', unsafe_allow_html=True)
+        if not _v.is_verified:
+            with st.expander("How to verify this in ten minutes (free)"):
+                for step, detail in ladbs_links(x.Address).items():
+                    st.markdown(f'<span class="cite"><b>{step}</b> — {detail}</span>',
                                 unsafe_allow_html=True)
-                        st.markdown('<span class="cite">Combining two gets there with less '
-                                    'of each. Use the <b>What if…</b> panel above to try a '
-                                    'mix and see where it lands.</span>',
-                                    unsafe_allow_html=True)
-                    else:
-                        st.markdown('<span class="cite">No single change gets this to STRONG. '
-                                    'It would take a combination — or the lot just isn\'t '
-                                    'one.</span>', unsafe_allow_html=True)
-                    if miss:
-                        st.markdown('<span class="cite">Won\'t do it alone: ' +
-                                    "; ".join(L["phrase"] for L in miss) + '</span>',
-                                    unsafe_allow_html=True)
 
-        # ---- Tal's main ask: play with THIS lot until it's a strong buy ----
-        f = x.get("_f") or {}
-        if f.get("comp_basis") and f.get("Buildable"):
-            o = overrides.get(x.Address, {})
-            with st.expander("What if… — change this lot's numbers and watch the signal move"):
-                st.markdown('<span class="cite">Everything here affects <b>this lot only</b>. '
-                            'Leave a box at its default to keep the standard assumption. '
-                            'The signal above updates as soon as you change something.</span>',
-                            unsafe_allow_html=True)
-                # Caps must never sit below the value we're seeding the box with, or
-                # Streamlit raises StreamlitValueAboveMaxError and the page dies. Lots
-                # like 860 Via De La Paz carry ~38,000 sf, well past any fixed ceiling,
-                # so derive each max from the lot's own numbers.
-                _v_off = int(o.get("offer") or (f.get("Price") or 0))
-                _v_con = int(o.get("constr") or a.construction_psf)
-                _v_bld = int(o.get("build") or f.get("Buildable") or 0)
-                _v_xps = int(o.get("exit_psf") or f.get("comp_basis") or 0)
-                w1, w2 = st.columns(2)
-                with w1:
-                    offer = st.number_input(
-                        "Your offer price ($)", 0, max(100_000_000, _v_off * 2),
-                        _v_off, 25_000,
-                        key=f"off_{x.Address}",
-                        help="What you'd actually pay. The list prices at full asking; "
-                             "drop this to see what a negotiated price does.")
-                    constr = st.number_input(
-                        "Construction $/sqft", 0, max(3_000, _v_con * 2),
-                        _v_con, 25,
-                        key=f"con_{x.Address}",
-                        help="A simple flat lot with good access builds cheaper than a "
-                             "hillside. Default is the sidebar number.")
-                with w2:
-                    bld = st.number_input(
-                        "Buildable sqft", 0, max(60_000, _v_bld * 3),
-                        _v_bld, 100,
-                        key=f"bld_{x.Address}",
-                        help="Override if you know the real prior house was bigger — "
-                             "e.g. a multi-storey home with a basement the county "
-                             "under-recorded.")
-                    xpsf = st.number_input(
-                        "Exit $/sqft", 0, max(15_000, _v_xps * 3),
-                        _v_xps, 50,
-                        key=f"xps_{x.Address}",
-                        help="What the finished home sells for per foot. Default is the "
-                             "matched comp basis; override with your own read.")
-                b1, b2 = st.columns([1, 1])
-                with b1:
-                    if st.button("Apply to this lot", key=f"apply_{x.Address}"):
-                        nd = {}
-                        if offer and offer != (f.get("Price") or 0): nd["offer"] = offer
-                        if constr and constr != a.construction_psf: nd["constr"] = constr
-                        if bld and bld != f.get("Buildable"): nd["build"] = bld
-                        if xpsf and xpsf != f.get("comp_basis"): nd["exit_psf"] = xpsf
-                        if nd: overrides[x.Address] = nd
-                        else: overrides.pop(x.Address, None)
-                        st.rerun()
-                with b2:
-                    if o and st.button("Reset to defaults", key=f"rst_{x.Address}"):
-                        overrides.pop(x.Address, None)
-                        st.rerun()
-                if o:
-                    st.markdown('<span class="cite">★ This lot is running on <b>your</b> '
-                                'numbers, not the defaults. It\'s marked in the export.'
-                                '</span>', unsafe_allow_html=True)
+    # ---- which legal path gives the bigger house ----
+    _env = f.get("envelope")
+    if _env and _env.get("eo1_base") and _env.get("eo8_base"):
+        _e1, _e8 = _env["eo1_base"], _env["eo8_base"]
+        _win = "EO8 zoning" if _e8 > _e1 else "EO1 rebuild"
+        with st.expander(f"Which path gives the bigger house? → {_win}"):
+            st.markdown(
+                f'<div class="card"><span class="cite">'
+                f'<b>EO1 like-for-like:</b> {_e1:,} sf — rebuild what burned, '
+                f'footprint and height both capped at 110%.<br>'
+                f'<b>EO8 zoning-compliant:</b> {_e8:,} sf base, '
+                f'{_env.get("eo8_bonus", 0):,} sf with the 20% design bonus — the '
+                f'prior structure is not the ceiling, LAMC zoning is. Bypasses local '
+                f'Coastal Act and CEQA review.<br><br>'
+                f'<b>Underwritten on the larger: {max(_e1,_e8):,} sf via {_win}.</b>'
+                f'{"<br><br>" + _env["note"] if _env.get("note") else ""}'
+                f'</span></div>', unsafe_allow_html=True)
 
-        # the 30->5 worksheet, per lot, kill-ordered
-        card = x.get("_card")
-        if isinstance(card, list) and card:
-            with st.expander("How to check this lot — work top to bottom, stop if any step fails"):
-                st.markdown('<span class="cite">Do the steps in order. Each one is cheap to start '
-                            'and the first ones are most likely to kill a bad lot — so a dead lot '
-                            'dies fast, before you spend a phone call on it.</span>',
-                            unsafe_allow_html=True)
-                for it in card:
-                    mins = f'<span class="cite"> · {it.minutes}</span>' if it.minutes else ""
-                    ask = ""
-                    if it.ask_verbatim:
-                        ask = (f'<div style="margin-top:6px;padding:8px 12px;background:#f2f0ea;'
-                               f'border-left:2px solid var(--ink);"><span class="cite">'
-                               f'<b>Say this:</b> {it.ask_verbatim}</span></div>')
-                    st.markdown(
-                        f'<div class="card">'
-                        f'<b>Step {it.rank}: {it.question}</b>{mins}<br><br>'
-                        f'<b>→ Do this now:</b> {it.do_now or it.where}<br>'
-                        f'{ask}'
-                        f'<span class="cite" style="display:block;margin-top:8px;">'
-                        f'<b>What we already know:</b> {it.have}<br>'
-                        f'{"<b>Where:</b> " + it.where + "<br>" if it.do_now and it.where else ""}'
-                        f'<b style="color:#7a2518;">✕ Drop the lot if:</b> {it.kills_if}'
-                        f'</span></div>',
+    if f.get("area_band") in ("alphabet-flats", "hillside"):
+        st.markdown(f'<div class="card"><span class="cite"><b>Construction cost '
+                    f'${f["area_psf"]:,.0f}/sf</b> — {f["area_why"]}</span></div>',
+                    unsafe_allow_html=True)
+    if f.get("rti"):
+        st.markdown('<div class="card"><span class="cite"><b>Listing mentions RTI / '
+                    'approved plans.</b> Shovel-ready means review is already cleared — '
+                    'lower soft cost and a shorter carry, both modelled here as a '
+                    'shorter hold. <b>Verify the permits are current and transfer</b>: '
+                    'RTI status can lapse and permits have their own clocks. Get the '
+                    'stamped set as a condition of purchase.</span></div>',
+                    unsafe_allow_html=True)
+
+    # ---- Coastal Commission exposure (Palisades) ----
+    _cf = coastal_flag(f.get("jcode"), f.get("lat"), f.get("lon"), x.Address,
+                       over_envelope=bool(f.get("upside")))
+    if _cf and _cf["tier"] in ("HIGH", "LIKELY", "UNKNOWN"):
+        _lbl = {"HIGH": "Coastal Commission — HIGH exposure, check before offering",
+                "LIKELY": "Coastal Zone likely — worth a 2-minute check",
+                "UNKNOWN": "Coastal Zone status unknown"}[_cf["tier"]]
+        with st.expander(_lbl):
+            st.markdown(f'<div class="card card-warn">{_cf["note"]}</div>',
                         unsafe_allow_html=True)
+
+    # ---- "what would make this a STRONG buy?" — solved, not guessed ----
+    pf_row = x.get("_pf")
+    if pf_row is not None and x.Signal in ("BUY", "MAYBE", "PASS"):
+        pts = path_to_strong(pf_row)
+        if pts.get("ok") and not pts.get("already"):
+            reach = [L for L in pts["levers"] if L.get("reachable")]
+            miss = [L for L in pts["levers"] if not L.get("reachable")]
+            head = (f"What would make this a STRONG buy? "
+                    f"(now {pts['current_roc']:.0%}, needs {pts['target_roc']:.0%})")
+            with st.expander(head):
+                if reach:
+                    st.markdown('<span class="cite">Any <b>one</b> of these on its own '
+                                'gets you there — everything else held as-is:</span>',
+                                unsafe_allow_html=True)
+                    for L in reach:
+                        st.markdown(
+                            f'<div class="card"><b>{L["label"]}</b> — '
+                            f'<span class="cite">{L["phrase"]}</span></div>',
+                            unsafe_allow_html=True)
+                    st.markdown('<span class="cite">Combining two gets there with less '
+                                'of each. Use the <b>What if…</b> panel above to try a '
+                                'mix and see where it lands.</span>',
+                                unsafe_allow_html=True)
+                else:
+                    st.markdown('<span class="cite">No single change gets this to STRONG. '
+                                'It would take a combination — or the lot just isn\'t '
+                                'one.</span>', unsafe_allow_html=True)
+                if miss:
+                    st.markdown('<span class="cite">Won\'t do it alone: ' +
+                                "; ".join(L["phrase"] for L in miss) + '</span>',
+                                unsafe_allow_html=True)
+
+    # ---- Tal's main ask: play with THIS lot until it's a strong buy ----
+    f = x.get("_f") or {}
+    if f.get("comp_basis") and f.get("Buildable"):
+        o = overrides.get(x.Address, {})
+        with st.expander("What if… — change this lot's numbers and watch the signal move"):
+            st.markdown('<span class="cite">Everything here affects <b>this lot only</b>. '
+                        'Leave a box at its default to keep the standard assumption. '
+                        'The signal above updates as soon as you change something.</span>',
+                        unsafe_allow_html=True)
+            # Caps must never sit below the value we're seeding the box with, or
+            # Streamlit raises StreamlitValueAboveMaxError and the page dies. Lots
+            # like 860 Via De La Paz carry ~38,000 sf, well past any fixed ceiling,
+            # so derive each max from the lot's own numbers.
+            _v_off = int(o.get("offer") or (f.get("Price") or 0))
+            _v_con = int(o.get("constr") or a.construction_psf)
+            _v_bld = int(o.get("build") or f.get("Buildable") or 0)
+            _v_xps = int(o.get("exit_psf") or f.get("comp_basis") or 0)
+            w1, w2 = st.columns(2)
+            with w1:
+                offer = st.number_input(
+                    "Your offer price ($)", 0, max(100_000_000, _v_off * 2),
+                    _v_off, 25_000,
+                    key=f"off_{x.Address}",
+                    help="What you'd actually pay. The list prices at full asking; "
+                         "drop this to see what a negotiated price does.")
+                constr = st.number_input(
+                    "Construction $/sqft", 0, max(3_000, _v_con * 2),
+                    _v_con, 25,
+                    key=f"con_{x.Address}",
+                    help="A simple flat lot with good access builds cheaper than a "
+                         "hillside. Default is the sidebar number.")
+            with w2:
+                bld = st.number_input(
+                    "Buildable sqft", 0, max(60_000, _v_bld * 3),
+                    _v_bld, 100,
+                    key=f"bld_{x.Address}",
+                    help="Override if you know the real prior house was bigger — "
+                         "e.g. a multi-storey home with a basement the county "
+                         "under-recorded.")
+                xpsf = st.number_input(
+                    "Exit $/sqft", 0, max(15_000, _v_xps * 3),
+                    _v_xps, 50,
+                    key=f"xps_{x.Address}",
+                    help="What the finished home sells for per foot. Default is the "
+                         "matched comp basis; override with your own read.")
+            b1, b2 = st.columns([1, 1])
+            with b1:
+                if st.button("Apply to this lot", key=f"apply_{x.Address}"):
+                    nd = {}
+                    if offer and offer != (f.get("Price") or 0): nd["offer"] = offer
+                    if constr and constr != a.construction_psf: nd["constr"] = constr
+                    if bld and bld != f.get("Buildable"): nd["build"] = bld
+                    if xpsf and xpsf != f.get("comp_basis"): nd["exit_psf"] = xpsf
+                    if nd: overrides[x.Address] = nd
+                    else: overrides.pop(x.Address, None)
+                    st.rerun()
+            with b2:
+                if o and st.button("Reset to defaults", key=f"rst_{x.Address}"):
+                    overrides.pop(x.Address, None)
+                    st.rerun()
+            if o:
+                st.markdown('<span class="cite">★ This lot is running on <b>your</b> '
+                            'numbers, not the defaults. It\'s marked in the export.'
+                            '</span>', unsafe_allow_html=True)
+
+    # the 30->5 worksheet, per lot, kill-ordered
+    card = x.get("_card")
+    if isinstance(card, list) and card:
+        with st.expander("How to check this lot — work top to bottom, stop if any step fails"):
+            st.markdown('<span class="cite">Do the steps in order. Each one is cheap to start '
+                        'and the first ones are most likely to kill a bad lot — so a dead lot '
+                        'dies fast, before you spend a phone call on it.</span>',
+                        unsafe_allow_html=True)
+            for it in card:
+                mins = f'<span class="cite"> · {it.minutes}</span>' if it.minutes else ""
+                ask = ""
+                if it.ask_verbatim:
+                    ask = (f'<div style="margin-top:6px;padding:8px 12px;background:#f2f0ea;'
+                           f'border-left:2px solid var(--ink);"><span class="cite">'
+                           f'<b>Say this:</b> {it.ask_verbatim}</span></div>')
+                st.markdown(
+                    f'<div class="card">'
+                    f'<b>Step {it.rank}: {it.question}</b>{mins}<br><br>'
+                    f'<b>→ Do this now:</b> {it.do_now or it.where}<br>'
+                    f'{ask}'
+                    f'<span class="cite" style="display:block;margin-top:8px;">'
+                    f'<b>What we already know:</b> {it.have}<br>'
+                    f'{"<b>Where:</b> " + it.where + "<br>" if it.do_now and it.where else ""}'
+                    f'<b style="color:#7a2518;">✕ Drop the lot if:</b> {it.kills_if}'
+                    f'</span></div>',
+                    unsafe_allow_html=True)
+
+# ---------------------------------------------------------------- the table
+# Screening view: every lot on one screen, sortable, scannable.
+_view = df[~df.Address.astype(str).str.strip().str.lower().isin(["nan", "none", ""])].copy()
+
+
+def _table_row(x):
+    mm = x.get("_margin") or {}
+    v = x.get("_verified")
+    return {
+        "★": x.Address in shortlist,
+        "Address": x.Address,
+        "Signal": x.Signal,
+        "Margin over market": (f"{mm['margin']:+.0%}" if mm else "—"),
+        "Verified": ("yes" if (v is not None and getattr(v, "is_verified", False)) else "no"),
+        "Breakeven $/sf": (f"${mm['breakeven']:,.0f}" if mm else "—"),
+        "Buildable sf": (f"{x.Buildable:,.0f}" if pd.notna(x.Buildable) else "—"),
+        "Ask": (f"${x.Price:,.0f}" if pd.notna(x.Price) else "—"),
+        "$/buildable ft": (f"${x.Price / x.Buildable:,.0f}"
+                           if pd.notna(x.Price) and pd.notna(x.Buildable) and x.Buildable
+                           else "—"),
+        "ROC": (f"{x.ROC:.0%}" if pd.notna(x.ROC) else "—"),
+    }
+
+
+_table = pd.DataFrame([_table_row(x) for _, x in _view.iterrows()])
+
+st.markdown("#### The list")
+st.markdown('<span class="cite">Sorted by margin over market — how far above the '
+            'comparable median each lot has to sell just to break even, with unverified '
+            'figures penalised. Click any column header to re-sort. Tick ★ to shortlist. '
+            'Pick one below for the full underwriting.</span>', unsafe_allow_html=True)
+
+if len(_table):
+    _edited = st.data_editor(
+        _table, use_container_width=True, hide_index=True, key="results_table",
+        disabled=[c for c in _table.columns if c != "★"],
+        column_config={
+            "★": st.column_config.CheckboxColumn("★", width="small",
+                                                 help="Add to the short list"),
+            "Margin over market": st.column_config.TextColumn(
+                help="Breakeven sale price against the comparable median. Negative means "
+                     "margin in your favour before the market has to move at all."),
+            "Verified": st.column_config.TextColumn(
+                help="Whether the prior square footage comes from a Certificate of "
+                     "Occupancy or original permit rather than a sheet or listing."),
+        })
+    if _edited is not None and "★" in _edited.columns:
+        for _i, _r in _edited.iterrows():
+            if _r["★"]:
+                shortlist.add(_r["Address"])
+            else:
+                shortlist.discard(_r["Address"])
+
+# ------------------------------------------------------------- one property
+st.markdown("---")
+st.markdown("#### Underwrite one property")
+_choices = list(_view.Address)
+if _choices:
+    _pick = st.selectbox("Property", _choices, key="detail_pick",
+                         label_visibility="collapsed")
+    _sel = _view[_view.Address == _pick]
+    if len(_sel):
+        x = _sel.iloc[0]
+        f = x.get("_f") or {}
+        mm = x.get("_margin") or {}
+        _css = ("card card-strong" if x.Signal == "STRONG"
+                else "card card-pass" if x.Signal == "PASS" else "card")
+        _bits = [f"{x.Jurisdiction}"]
+        if pd.notna(x.Price):
+            _bits.append(f"${x.Price:,.0f} ask")
+        if pd.notna(x.Buildable):
+            _bits.append(f"{x.Buildable:,.0f} sf buildable")
+        if pd.notna(x.ROC):
+            _bits.append(f"<b>{x.ROC:.0%} ROC</b>")
+        if x.get("_breakeven"):
+            _bits.append(f"<b>{x['_breakeven']}</b>")
+        _head = ""
+        if mm:
+            _col = {"STRONG": "#1f5c2e", "GOOD": "#1f5c2e", "TIGHT": "#8a5a00",
+                    "STRETCH": "#8a5a00", "NO": "#7a2518"}.get(mm["tier"], "#55524a")
+            _head = (f'<b style="color:{_col}">{mm["tier"]} · breaks even at '
+                     f'${mm["breakeven"]:,}/sf against a market median of '
+                     f'${mm["median"]:,} ({mm["margin"]:+.0%})</b><br>')
+        st.markdown(f'<div class="{_css}">{sig_stamp(x.Signal)} &nbsp; <b>{x.Address}</b>'
+                    f'<br>{_head}<span class="cite">{" · ".join(_bits)}<br>{x.Why}'
+                    f'</span></div>', unsafe_allow_html=True)
+        render_detail(x, f, a, discount, overrides)
 
 st.markdown("---")
 
