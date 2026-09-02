@@ -23,6 +23,8 @@ import jurisdiction as jur
 from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
 import guide
+import decide
+import decide_ui
 from engine import (BUILD, Assumptions, CompMarket, ProForma, sensitivity,
                     what_youd_have_to_believe, discount_to_breakeven, path_to_strong)
 from diligence import build_card, card_to_rows
@@ -927,6 +929,31 @@ def render_detail(x, f, a, discount, overrides):
     # "nan" row from a trailing line in the CSV).
     f = x.get("_f") or {}
 
+    # ---- the decision layer ----
+    # Ranking answers "which lots". This answers "should we commit, and if we can't
+    # decide yet, what is the cheapest thing that would let us". It runs here rather
+    # than in the batch because each sweep rebuilds several pro formas, and because
+    # this is the screen where someone is actually deciding.
+    _mmd = x.get("_margin") if isinstance(x.get("_margin"), dict) else {}
+    _basis = f.get("comp_basis") or (_mmd.get("median") if _mmd else None)
+    _pf_row = x.get("_pf")
+    _ver = bool(getattr(x.get("_verified"), "is_verified", False))
+    if _pf_row is not None and _basis:
+        _acts = decide.resolution_value(_pf_row, f, _ver, _basis)
+        _req = decide.required_case(_pf_row, f, _ver)
+        _opt = decide.option_economics(_pf_row, _acts, _pf_row.land_cost)
+        decide_ui.render_required_case(_req, _mmd.get("margin"),
+                                       x.get("_breakeven_psf"), _basis)
+        st.markdown("")
+        decide_ui.render_next_actions(_acts)
+        decide_ui.render_option(_opt)
+        decide_ui.render_memo_download(
+            address=x.Address, pf=_pf_row, facts=f, verified=_ver, basis=_basis,
+            margin=_mmd.get("margin"), breakeven=x.get("_breakeven_psf"),
+            actions=_acts, required=_req, option=_opt,
+            stability=st.session_state.get("_stability"), build_stamp=BUILD)
+        st.markdown("---")
+
     # ---- ULA threshold cliff: selling for less can net more ----
     if x.get("_cliff"):
         st.markdown(f'<div class="card card-warn">{x["_cliff"]}</div>',
@@ -1231,7 +1258,9 @@ def _table_row(x):
         "$/buildable ft": (f"${x.Price / x.Buildable:,.0f}"
                            if pd.notna(x.Price) and pd.notna(x.Buildable) and x.Buildable
                            else "—"),
-        "ROC": (f"{x.ROC:.0%}" if pd.notna(x.ROC) else "—"),
+        # ROC deliberately not shown here. It moves with whatever exit price you
+        # assume, so it invites ranking on the least knowable input in the model.
+        # It is still on the single-property screen, where the assumption is visible.
     }
 
 
@@ -1264,6 +1293,36 @@ if len(_table):
                 shortlist.add(_r["Address"])
             else:
                 shortlist.discard(_r["Address"])
+
+# ------------------------------------------------------------------ finalists
+# Stability and the side-by-side run on the SHORTLIST, not the full batch. Two
+# reasons: sweeping 150 lots costs a minute and produces no decision, and the
+# question these answer — which of these two, and how sure are we — only exists
+# once someone has picked finalists. Sweep count is deliberately modest and the
+# seed is fixed, so the figure does not move when an unrelated widget is clicked.
+if len(shortlist) >= 2:
+    st.markdown("---")
+    _fin = []
+    for _, _s in df[df.Address.isin(shortlist)].iterrows():
+        _p = _s.get("_pf")
+        _fm = _s.get("_margin") if isinstance(_s.get("_margin"), dict) else {}
+        _ff = _s.get("_f") or {}
+        _fb = _ff.get("comp_basis") or (_fm.get("median") if _fm else None)
+        if _p is None or not _fb:
+            continue
+        _fv = bool(getattr(_s.get("_verified"), "is_verified", False))
+        _fin.append(dict(
+            name=_s.Address, pf=_p, basis=_fb, verified=_fv,
+            comps=_ff.get("comps") or [], facts=_ff,
+            margin=_fm.get("margin"), breakeven=_s.get("_breakeven_psf"),
+            required=decide.required_case(_p, _ff, _fv),
+            actions=decide.resolution_value(_p, _ff, _fv, _fb)))
+    if len(_fin) >= 2:
+        _stab = decide.rank_stability(_fin, draws=400)
+        st.session_state["_stability"] = _stab
+        decide_ui.render_compare(_fin)
+        st.markdown("")
+        decide_ui.render_stability(_stab)
 
 # ------------------------------------------------------------- one property
 st.markdown("---")

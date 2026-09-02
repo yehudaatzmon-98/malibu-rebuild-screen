@@ -30,7 +30,7 @@ from __future__ import annotations
 # Bumped on every substantive change and rendered in the app footer, so anyone
 # looking at the deployed tool can tell which build it is without trusting a commit
 # log that reads "Add files via upload" twenty times over.
-BUILD = "2026-09-02b · ULA indexed · cliff callsite · sample-path crashes · guide in-app"
+BUILD = "2026-09-02c · decision layer: next actions, stability, required downside, compare, memo"
 import math
 from dataclasses import dataclass, field
 from typing import Optional
