@@ -29,6 +29,8 @@ from coastal import coastal_flag
 from verification import (Verified, margin_over_market, rank_score,
                           confidence_note, ladbs_links)
 from cofo_parser import parse_cofo, parse_cofo_pdf, to_csv_row
+from underwrite import (waterfall, compare_structures, hold_sensitivity,
+                        what_breaks_it, sensitivity_grid)
 from construction import area_construction_cost
 from engine import ula_tax, cliff_advice
 
@@ -936,6 +938,86 @@ for _, x in df.iterrows():
         if x.get("_cliff"):
             st.markdown(f'<div class="card card-warn">{x["_cliff"]}</div>',
                         unsafe_allow_html=True)
+        # ---- SECOND STAGE: the full underwriting on one chosen deal ----
+        # The ranking above is a sorting job. This is the step after: what the
+        # investor actually receives, what leverage does in both directions, and
+        # which assumption ends the deal if it is wrong.
+        if x.get("_pf") is not None and pd.notna(x.Buildable) and pd.notna(x.Price):
+            with st.expander("Underwrite this deal — waterfall, structures, what breaks it"):
+                _sq, _ld = float(x.Buildable), float(x.Price)
+                _basis = (f.get("comp_basis") or 0)
+                _mm2 = x.get("_margin") or {}
+                _median = _mm2.get("median") or _basis
+                _exit = st.number_input(
+                    "Exit price to underwrite ($/sf)", 500, 6000,
+                    int(round(_basis or 1700)), 50, key=f"uw_exit_{x.Address}",
+                    help="Defaults to the matched comp basis. The market median for "
+                         "this street and size band is shown below for reference.")
+                st.markdown(f'<span class="cite">Comparable median '
+                            f'<b>${_median:,.0f}/sf</b> · this lot breaks even at '
+                            f'<b>${x.get("_breakeven_psf", 0):,.0f}/sf</b></span>',
+                            unsafe_allow_html=True)
+
+                _base_a = Assumptions(**{**a.__dict__,
+                                         "construction_psf": float(
+                                             f.get("area_psf") or a.construction_psf)})
+                _pf2 = ProForma(_sq, _ld, _exit, f["jcode"], _base_a, express=False)
+                _r2 = _pf2._run_one(_exit)
+                _w = waterfall(_r2["profit"], _r2["equity"],
+                               months=_base_a.total_months)
+
+                st.markdown("**What the investor receives**")
+                st.markdown(
+                    f'<div class="card"><span class="cite">'
+                    f'Total project cost <b>${_r2["total_cost"]:,.0f}</b> · '
+                    f'equity <b>${_r2["equity"]:,.0f}</b> · '
+                    f'profit <b>${_r2["profit"]:,.0f}</b><br><br>'
+                    f'<b>LP</b> — puts in ${_w["lp_capital"]:,.0f}, receives '
+                    f'${_w["lp_total"]:,.0f}. <b>{_w["lp_multiple"]:.2f}x</b> over '
+                    f'{_base_a.total_months:.0f} months, roughly '
+                    f'<b>{_w["lp_irr"]:.0%} IRR</b>.<br>'
+                    f'<b>GP</b> — puts in ${_w["gp_capital"]:,.0f}, receives '
+                    f'${_w["gp_total"]:,.0f} (<b>{_w["gp_multiple"]:.1f}x</b>).<br><br>'
+                    f'<b>Effective promote {_w["effective_promote"]:.0%}.</b> A 50% '
+                    f'profit share on 10% of the capital. Normal for a friends-and-'
+                    f'family single asset; institutions expect roughly 20% over a '
+                    f'preferred return at fund stage. And note losses follow capital, '
+                    f'not the split — on a loss the LP wears 90%, because the GP\'s '
+                    f'50% is upside only.</span></div>', unsafe_allow_html=True)
+
+                st.markdown("**Does leverage help this deal?**")
+                _rows = compare_structures(_sq, _ld, _exit, f["jcode"], _base_a,
+                                           downside_psf=_median)
+                st.dataframe(pd.DataFrame([{
+                    "Structure": s["name"],
+                    "Equity in": f"${s['equity']:,.0f}",
+                    "Breakeven $/sf": f"${s['breakeven']:,.0f}",
+                    f"CoC @ ${_exit:,}": f"{s['coc']:.0%}",
+                    f"CoC @ ${_median:,.0f}": f"{s.get('down_coc', 0):.0%}",
+                } for s in _rows]), use_container_width=True, hide_index=True)
+                st.markdown('<span class="cite">The breakeven barely moves across '
+                            'structures — it is the same project cost either way. '
+                            'Leverage changes who earns the profit and how hard a miss '
+                            'lands, not whether the deal works.</span>',
+                            unsafe_allow_html=True)
+
+                st.markdown("**What breaks it** — ranked by damage")
+                for _t in what_breaks_it(_sq, _ld, _exit, f["jcode"], _base_a):
+                    st.markdown(
+                        f'<div class="card"><span class="cite">'
+                        f'<b>{_t["factor"]}</b> → return on cost {_t["roc"]:.0%} '
+                        f'(<b>{_t["delta"]*100:+.0f} points</b>)<br>{_t["note"]}'
+                        f'</span></div>', unsafe_allow_html=True)
+
+                st.markdown("**Schedule**")
+                st.dataframe(pd.DataFrame([{
+                    "Build months": h["build_months"],
+                    "Interest": f"${h['interest']:,.0f}",
+                    "Total cost": f"${h['total_cost']:,.0f}",
+                    "ROC": f"{h['roc']:.0%}",
+                } for h in hold_sensitivity(_sq, _ld, _exit, f["jcode"], _base_a)]),
+                    use_container_width=True, hide_index=True)
+
         # ---- what the economics actually rest on ----
         _v = x.get("_verified")
         if _v is not None:
