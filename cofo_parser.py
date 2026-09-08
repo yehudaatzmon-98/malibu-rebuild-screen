@@ -273,7 +273,10 @@ def to_csv_row(parsed: dict, address: str = "") -> dict:
         "HILLSIDE": parsed.get("hillside_ordinance"),
         "ESA": parsed.get("environmentally_sensitive"),
         "FIRE_DISTRICT": parsed.get("fire_district"),
-        "SOURCE": parsed.get("prior_sqft_source", "CERTIFIED"),
+        # NOT "SOURCE". Redfin exports already have a SOURCE column holding the
+        # MLS name, and when these rows were merged into one the MLS value won
+        # the lookup in app.py and the CERTIFIED provenance was thrown away.
+        "PRIOR_SQFT_SOURCE": parsed.get("prior_sqft_source", "CERTIFIED"),
         "COFO_NUMBER": parsed.get("cofo_number"),
         "COFO_DATE": parsed.get("cofo_date"),
     }

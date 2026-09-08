@@ -214,6 +214,12 @@ def eo8_zoning_envelope(lot_sqft: Optional[float], coastal: bool = False,
               f"string on ZIMAS — R1 Variation Zones carry different ratios.</span>"))
 
 
+# The largest house the comparable set can actually price. The direct set is 28
+# sales of 4,500 to 7,000 sqft on the Alphabet streets. Above this the Palisades
+# trades as a trophy market with no reliable median.
+COMP_SUPPORTED_SQFT = 7_000
+
+
 def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = None,
                   storeys: Optional[int] = None, prior_height_ft: Optional[float] = None,
                   coastal: bool = False, hillside: bool = False) -> dict:
@@ -263,8 +269,33 @@ def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = N
             f"{eo8_base:,} sf of zoning capacity. The prior house was big relative to "
             f"the lot, which is the thesis working as intended.")
 
+    # ---- marketable ceiling -------------------------------------------------
+    # Added 8 Sep 2026. EO8 scales linearly with lot area, so a 44,000 sqft hillside
+    # parcel returned a 19,800 sqft envelope and then ranked on it. There is no
+    # comparable set at that size: the direct set is 28 sales of 4,500 to 7,000 sqft
+    # on the Alphabet streets, and above roughly 7,000 sqft the Palisades has a
+    # handful of trades a decade at prices no median describes.
+    #
+    # The legal envelope is not reduced. It is reported in full. But the figure the
+    # ranking uses is capped at what the comps can price, and the excess is carried
+    # separately as unpriced capacity. Rule 4: range, not verdict. Rule 5: a bet on
+    # the trophy tier is a bet, and it does not get folded into the base case.
+    unpriced = None
+    ranked_sqft = best[0]
+    if best[0] and best[0] > COMP_SUPPORTED_SQFT:
+        unpriced = best[0] - COMP_SUPPORTED_SQFT
+        ranked_sqft = COMP_SUPPORTED_SQFT
+        note_parts.append(
+            f"<b>Envelope exceeds the comparable set.</b> The zoning path supports "
+            f"{best[0]:,} sf, but the direct comp set tops out around "
+            f"{COMP_SUPPORTED_SQFT:,} sf. The ranking prices {COMP_SUPPORTED_SQFT:,} sf "
+            f"and carries the remaining {unpriced:,} sf as unpriced capacity. A house "
+            f"this size is a trophy product with a handful of buyers, not a spec "
+            f"exit at a median. Underwrite it separately or not at all.")
+
     return dict(
-        best_sqft=best[0], best_path=best[1],
+        best_sqft=ranked_sqft, best_path=best[1], legal_sqft=best[0],
+        unpriced_sqft=unpriced,
         eo1_base=eo1_base, eo1_upside=eo1_upside, eo1_note=eo1.get("note"),
         eo8_base=eo8_base, eo8_bonus=eo8.get("bonus"), eo8_note=eo8.get("note"),
         height_blocks_storey=height_blocks_storey,

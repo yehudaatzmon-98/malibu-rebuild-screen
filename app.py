@@ -15,6 +15,7 @@ they're one product.
 Run:  streamlit run app.py
 """
 import io
+import re
 import pandas as pd
 import streamlit as st
 
@@ -553,6 +554,62 @@ if not addr_col:
     st.error("No ADDRESS column. Download the Redfin search results, not a single listing.")
     st.stop()
 
+# ---------------------------------------------------------------------------
+# JOIN THE VERIFIED RECORDS INTO THE UPLOAD.
+#
+# Until 8 Sep 2026 the C of O vault wrote to session state, rendered a table, and
+# offered a download. Nothing read it back. The help text told the user to merge the
+# columns into their Redfin CSV by hand, and if they did, the SOURCE column collided
+# with Redfin's own SOURCE column (CRMLS / TheMLS) and the CERTIFIED provenance was
+# silently discarded. Certified lots were being ranked at ASSESSOR weight 0.65.
+#
+# The join happens here instead, on normalised address, before anything is computed.
+# ---------------------------------------------------------------------------
+def _akey(a) -> str:
+    """Normalise an address enough to match across LADBS and Redfin spellings."""
+    a = str(a or "").upper().replace(",", " ").replace(".", " ")
+    a = re.sub(r"\b(NORTH|SOUTH|EAST|WEST)\b", lambda m: m.group(1)[0], a)
+    a = re.sub(r"\b(STREET|DRIVE|AVENUE|BOULEVARD|PLACE|ROAD|LANE|COURT|TERRACE|WAY|CIRCLE)\b",
+               lambda m: {"STREET": "ST", "DRIVE": "DR", "AVENUE": "AVE",
+                          "BOULEVARD": "BLVD", "PLACE": "PL", "ROAD": "RD",
+                          "LANE": "LN", "COURT": "CT", "TERRACE": "TER",
+                          "WAY": "WAY", "CIRCLE": "CIR"}[m.group(1)], a)
+    a = re.sub(r"\b(ST|DR|AVE|BLVD|PL|RD|LN|CT|TER|WAY|CIR)\b", " ", a)
+    a = re.sub(r"\b(PACIFIC PALISADES|MALIBU|LOS ANGELES|SANTA MONICA|CA)\b", " ", a)
+    a = re.sub(r"\b9\d{4}\b", " ", a)
+    return " ".join(a.split())
+
+_vrec = st.session_state.get("_verified_records") or {}
+_joined, _unmatched = 0, []
+if _vrec:
+    _by_key = {_akey(v.get("ADDRESS") or k): v for k, v in _vrec.items()}
+    _cols = ("PRIOR_SQFT", "PRIOR_HEIGHT_FT", "PRIOR_STORIES", "BASEMENT_LEVELS",
+             "LOT_SQFT", "ZONE", "COASTAL_ZONE", "HILLSIDE", "PRIOR_SQFT_SOURCE",
+             "COFO_NUMBER", "COFO_DATE")
+    for _c in _cols:
+        if _c not in raw.columns:
+            raw[_c] = None
+    _hit = set()
+    for _i, _a in raw[addr_col].items():
+        _v = _by_key.get(_akey(_a))
+        if not _v:
+            continue
+        _hit.add(_akey(_a)); _joined += 1
+        for _c in _cols:
+            _src_key = "SOURCE" if _c == "PRIOR_SQFT_SOURCE" else _c
+            _val = _v.get(_c, _v.get(_src_key))
+            if _val is not None and str(_val).strip() != "":
+                raw.at[_i, _c] = _val
+    _unmatched = [v.get("ADDRESS") or k for k, v in _vrec.items()
+                  if _akey(v.get("ADDRESS") or k) not in _hit]
+    if _joined:
+        st.success(f"{_joined} verified record(s) joined into this file. "
+                   f"Those lots now rank at CERTIFIED weight.")
+    if _unmatched:
+        st.warning("Verified records that did not match any row in this CSV: "
+                   + ", ".join(str(u) for u in _unmatched)
+                   + ". Check the address spelling, or add the lot to the export.")
+
 # Streamlit re-runs the whole script on every widget click. The batch does one live
 # county lookup per row, so without caching, moving a slider in the per-lot playground
 # would re-run 172 lookups and take a minute. Key the cache on the file contents +
@@ -596,7 +653,10 @@ def _gather_facts(raw, addr_col, mkt):
             return None
         _v_height  = _col("PRIOR_HEIGHT_FT", "PRIOR_HEIGHT")
         _v_lot     = _col("LOT_SQFT")
-        _v_src     = _col("SOURCE", "PRIOR_SQFT_SOURCE")
+        # NOT "SOURCE": Redfin exports carry their own SOURCE column holding
+        # CRMLS / TheMLS, which used to win this lookup and silently demote
+        # every certified lot to ASSESSOR weight.
+        _v_src     = _col("PRIOR_SQFT_SOURCE", "AREA_SOURCE")
         _v_coastal = _col("COASTAL_ZONE")
         _v_hill    = _col("HILLSIDE")
 
@@ -649,12 +709,13 @@ def _gather_facts(raw, addr_col, mkt):
                    ("RTI", "READY TO ISSUE", "READY-TO-ISSUE", "SHOVEL READY",
                     "SHOVEL-READY", "PERMITS IN HAND", "PERMITTED", "APPROVED PLANS",
                     "PLANS APPROVED", "FULLY ENTITLED", "ENTITLED"))
-        _cost = area_construction_cost(addr, default=a.construction_psf)
+        _cost = area_construction_cost(addr, default=a.construction_psf,
+                                       lot_sqft=csv_lot)
         f = dict(Address=addr, Jurisdiction=j.name, jcode=j.code,
                  lat=(None if pd.isna(lat) else float(lat)),
                  lon=(None if pd.isna(lon) else float(lon)),
                  rti=_rti, area_psf=_cost["psf"], area_band=_cost["band"],
-                 area_why=_cost["why"],
+                 area_why=_cost["why"], area_confidence=_cost.get("confidence"),
                  prior_height_ft=(float(_v_height) if _v_height is not None else None),
                  area_source=(str(_v_src).upper() if _v_src else None),
                  verified_coastal=_v_coastal, verified_hillside=_v_hill,
@@ -690,7 +751,8 @@ def _gather_facts(raw, addr_col, mkt):
                 p.prior_sqft, lot_sqft=p.lot_sqft,
                 prior_height_ft=(float(_v_height) if _v_height is not None else None),
                 coastal=bool(_v_coastal) if _v_coastal is not None else False,
-                hillside=bool(_v_hill) if _v_hill is not None else False)
+                hillside=(bool(_v_hill) if _v_hill is not None
+                          else _cost.get("band") == "hillside"))
             build = be.get("best_sqft")
             upside = be.get("eo1_upside") or be.get("eo8_bonus")
             build_basis = ("EO8 zoning (R1 0.45 FAR)" if be.get("best_path") == "EO8 zoning"
