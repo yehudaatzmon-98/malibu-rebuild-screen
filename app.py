@@ -665,7 +665,7 @@ if _vrec:
             _v = _by_nd.get(_akey_nd(_a))
         if not _v:
             continue
-        _hit.add(_akey(_a)); _joined += 1
+        _hit.add(_akey(_v.get("ADDRESS") or "") or _akey(_a)); _joined += 1
         for _c in _cols:
             _src_key = "SOURCE" if _c == "PRIOR_SQFT_SOURCE" else _c
             _val = _v.get(_c, _v.get(_src_key))

@@ -189,13 +189,20 @@ def eo8_zoning_envelope(lot_sqft: Optional[float], coastal: bool = False,
     if not lot_sqft or lot_sqft <= 0:
         return dict(base=None, note=("No lot size — can't compute the EO8 zoning "
                                      "envelope. Lot area is the whole input."))
-    if coastal:
+    if coastal and not hillside:
+        # The exemption is for Coastal Zone lots OUTSIDE a Hillside Area, which is what
+        # the caveat above says and what LAMC 12.21.1 A does. Until 8 Sep 2026 this
+        # tested `coastal` alone and fired first, so any lot that was both coastal and
+        # hillside returned no EO8 envelope at all and silently fell back to EO1. On
+        # 623 N Marquette that reported 1,863 sf against a BHO range of 2,405-4,440 and
+        # ranked the lot on roughly half its buildable area. The lots most affected are
+        # exactly the Palisades hillside parcels inside the Coastal Zone, which is most
+        # of the shortlist. Hillside is tested first below.
         return dict(base=None, flagged=True, note=(
-            "<b>Coastal Zone lot — the R1 floor-area ratio does not apply.</b> "
-            "Coastal Zone properties outside a Hillside Area are exempt from "
-            "Residential Floor Area limits but subject to Floor Area limits under "
-            "LAMC 12.21.1 A. Confirm the applicable limit on ZIMAS before assuming "
-            "either envelope."))
+            "<b>Coastal Zone lot outside a Hillside Area — the R1 floor-area ratio "
+            "does not apply.</b> Exempt from Residential Floor Area limits but subject "
+            "to Floor Area limits under LAMC 12.21.1 A. Confirm the applicable limit "
+            "on ZIMAS before assuming either envelope."))
     if hillside:
         # Until 8 Sep 2026 this returned None and the lot dropped out of the ranking
         # entirely — 77 of 132 Palisades lots on the Sep 2026 export. The ordinance
