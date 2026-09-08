@@ -146,21 +146,26 @@ _assump_kwargs = dict(
              "controls and an out-of-footprint control group it is +9.4%, 95% CI -1.2% to +21.3%, "
              "p=0.085. The interval spans zero, so it defaults to zero and is a slider, not an "
              "assumption."),
-    loan_to_cost=_cap.slider("Loan to cost — single construction loan", 0.50, 0.85, 0.80, 0.05,
+    loan_to_cost=_cap.slider("Loan to cost — single construction loan", 0.50, 0.85, 0.70, 0.05,
         help="DECIDED 1 Sep 2026: one construction loan from the outset, borrower brings 20% cash, "
              "lender finances 80% INCLUDING the interest reserve. The stack is circular (the loan "
              "sizes off a total that contains the reserve the loan funds) and is solved by fixed "
-             "point, not assumed away. NOTE: a sponsor with no completed ground-up development as "
-             "principal typically sees 65-75%, and 80% only against recourse and a completion "
-             "guaranty. At 70% the equity cheque is roughly double what has been shown to anyone."),
+             "point, not assumed away. DEFAULT IS 70%, not the 80% agreed in principle: a "
+             "sponsor with no completed ground-up development as principal typically sees "
+             "65-75%, and 80% only against recourse and a completion guaranty. At 70% the "
+             "equity cheque on a real build is $1.51M against $1.06M at 80%. Underwrite 70 "
+             "and treat 80 as upside."),
     loan_rate=_cap.slider("Construction loan rate", 0.05, 0.15, 0.09, 0.005),
     loan_fee_pct=_cap.slider("Origination fee (points)", 0.0, 0.03, 0.01, 0.0025),
-    burn_recovery=_cap.slider("BURN-ZONE RECOVERY BET", 0.0, 1.0, 0.00, 0.05,
+    burn_recovery=_cap.slider("BURN-ZONE RECOVERY BET", 0.0, 1.0, 0.20, 0.05,
         help="THE BET, and the single largest one in this model. Standing homes inside the fire "
              "footprint repriced down about 17% (95% CI -31% to -0.3%, n=24 post-fire sales inside "
              "the footprint). 0.00 carries that discount to exit. 1.00 assumes the burn zone returns "
-             "to its pre-fire relationship with the rest of the Westside by 2029. Defaults to zero "
-             "under rule 5. This is the same bet as the scarcity premium stated from the other side "
+             "to its pre-fire relationship with the rest of the Westside by 2029. DEFAULT 0.20, "
+             "which is measured rather than assumed: the discount was near 37% immediately "
+             "after the fire and has narrowed to about 14%, so roughly a fifth of it has "
+             "already closed. It has been flat for three quarters and the remaining trend is "
+             "not distinguishable from zero (p=0.52), so anything above 0.20 is a forecast. This is the same bet as the scarcity premium stated from the other side "
              "— never switch both on without saying so."),
     build_months=st.sidebar.slider("Build months", 10, 42, 30, 1,
         help="Two Palisades builds pulled from LADBS ran 34 and 35 months (501 Swarthmore, "
@@ -1615,6 +1620,12 @@ def _table_row(x):
         # R1 caps floor area per lot, so an ask means nothing until it is divided
         # by what can be built. Two lots at the same ask differ threefold here.
         "Breakeven land $/ft": (f"${_ld['breakeven_land_psf']:,.0f}" if _ld else "—"),
+        # The number you could put in a contract. The model has computed this all
+        # along and never showed it, so every conversation was about whether a lot
+        # worked at ask rather than what to offer for it.
+        "Offer at breakeven": (f"${_ld['breakeven_land_total']:,.0f}" if _ld else "—"),
+        "Offer at 15%": (f"${_ld['target_land_total']:,.0f}" if _ld else "—"),
+        "vs ask": (f"{_ld['headroom_pct']:+.0%}" if _ld else "—"),
         "Clears?": ("—" if not _ld
                     else "yes" if _ld["clears_breakeven"] else "NO"),
         "Burn zone": ("UNSCREENED" if _b is None else "yes" if _b else "no"),
@@ -1653,6 +1664,17 @@ if len(_table):
                      "Compare against $/buildable ft to its left. Palisades land is "
                      "priced per lot while R1 caps floor area per lot, so the ask on "
                      "its own says nothing about whether a lot works."),
+            "Offer at breakeven": st.column_config.TextColumn(
+                help="Land price at which this lot returns exactly zero under the "
+                     "current assumptions. The ceiling on any bid, not a target."),
+            "Offer at 15%": st.column_config.TextColumn(
+                help="Land price for a 15% margin on cost. Where a written offer "
+                     "should start. Negative means no land price works: the lot "
+                     "cannot carry a 15% margin at any purchase price."),
+            "vs ask": st.column_config.TextColumn(
+                help="How far breakeven land sits below the asking price. Every "
+                     "seller in this pipeline has already cut hard, so this is a "
+                     "negotiating gap, not necessarily a rejection."),
             "Clears?": st.column_config.TextColumn(
                 help="Whether the ask is at or below breakeven land value. NO means "
                      "the lot cannot work at the asking price under the current "
