@@ -43,6 +43,7 @@ These remain DEFAULTS. The per-lot override wins, and should be used whenever th
 is a real bid.
 """
 from __future__ import annotations
+import re
 from typing import Optional
 
 PSF_FLATS = 700.0
@@ -59,7 +60,7 @@ LOT_HILLSIDE_SQFT = 12_000
 _FLATS = (
     "albright", "alma real", "bashford", "bestor", "bollinger", "carey",
     "dalehurst", "de pauw", "earlham", "el medio", "embury", "fiske", "frontera",
-    "galloway", "goucher", "hartzell", "haverford", "iliff", "kagawa", "marquette",
+    "galloway", "goucher", "hartzell", "haverford", "iliff", "kagawa",
     "monument", "muskingum", "northfield", "ocampo", "oreo", "radcliffe",
     "swarthmore", "toyopa", "via de la paz", "friends", "hampden", "beirut",
     "mount holyoke", "las lomas ave",
@@ -94,7 +95,10 @@ def _street(address: str) -> str:
 def area_construction_cost(address: Optional[str], default: float = 1000.0,
                            lat: Optional[float] = None,
                            lon: Optional[float] = None,
-                           lot_sqft: Optional[float] = None) -> dict:
+                           lot_sqft: Optional[float] = None,
+                           parcel_hillside: Optional[bool] = None,
+                           bearing_depth_ft: Optional[float] = None,
+                           foundation: Optional[str] = None) -> dict:
     """
     Suggest a $/sqft starting point from the address, with the reasoning attached.
 
@@ -106,6 +110,41 @@ def area_construction_cost(address: Optional[str], default: float = 1000.0,
         "none"    - no signal. The number returned is the sidebar default and
                     carries no information. FLAG THIS LOT, do not rank on it.
     """
+    # ---------------------------------------------------------------- 8 Sep 2026
+    # HILLSIDE DESIGNATION IS NOT HILLSIDE COST. 623 N Marquette carries Hillside
+    # Ordinance YES, Hillside Grading Area YES and Baseline Hillside Ordinance Yes on
+    # its parcel record, and its 2004 Schick geotechnical report finds dense alluvial
+    # terrace at 1 to 6 feet below grade, conventional spread footings, and no hard
+    # excavation. That is ordinary construction on a parcel the code calls hillside.
+    # 1228 Las Lomas carries the same designations and finds 7.5 feet of uncertified
+    # fill over bedrock at 11 feet in a landslide hazard zone. Same flag, opposite cost.
+    #
+    # So the parcel hillside flag governs the ENVELOPE (Baseline Hillside Ordinance
+    # sets residential floor area) and the GEOTECHNICAL findings govern the COST.
+    # Where a soils report exists, it outranks every heuristic below.
+    if bearing_depth_ft is not None or foundation:
+        shallow = (bearing_depth_ft is not None and bearing_depth_ft <= 6)
+        conventional = bool(foundation and
+                            re.search(r"spread|pad|conventional|continuous", foundation, re.I))
+        # NOT a bare "deep": LADBS reports say "deepened pad footings" for the
+        # ordinary shallow case, which this used to misread as deep foundations.
+        deep = bool(foundation and re.search(
+            r"caisson|\bpiles?\b|shoring|drilled pier|grade beam", foundation, re.I))
+        if deep or (bearing_depth_ft is not None and bearing_depth_ft > 10):
+            return dict(psf=PSF_HILLSIDE, band="hillside", confidence="geotechnical",
+                        why=("Soils report indicates deep foundations or bearing well "
+                             "below grade. This is the expensive case and the figure is "
+                             "sourced rather than inferred. Confirm against a real bid."))
+        if shallow and conventional:
+            return dict(psf=default, band="designated-hillside-benign-soil",
+                        confidence="geotechnical",
+                        why=("Soils report finds competent bearing material near grade and "
+                             "conventional spread or pad footings. The parcel may still be "
+                             "flagged Hillside for zoning, which governs floor area, but "
+                             "the FOUNDATION is ordinary. Neither the $700 flats figure nor "
+                             "the $1,150 hillside figure is right here. Price this lot from "
+                             "a bid, not a band."))
+
     if not address:
         return dict(psf=default, band="unknown", confidence="none",
                     why="No address. Using the sidebar default, which is not a finding.")

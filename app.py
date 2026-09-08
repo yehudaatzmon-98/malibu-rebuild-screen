@@ -747,16 +747,32 @@ def _gather_facts(raw, addr_col, mkt):
             # Take the GREATER of the EO1 rebuild envelope and the EO8 zoning
             # envelope. Computing EO1 alone systematically understates lots where a
             # small or single-storey house burned — which are the cheapest to buy.
+            # ZONE and HILLSIDE come from the verified record where one exists. Both
+            # appear in the PARCEL INFORMATION block of any C of O issued from roughly
+            # 2008 on, and getting them wrong is what produced a 5,050 sqft envelope on
+            # an RE11 hillside lot and a 3,514 sqft one on an R1 hillside lot.
+            _v_zone = _col("ZONE")
             be = jur.best_envelope(
                 p.prior_sqft, lot_sqft=p.lot_sqft,
                 prior_height_ft=(float(_v_height) if _v_height is not None else None),
                 coastal=bool(_v_coastal) if _v_coastal is not None else False,
                 hillside=(bool(_v_hill) if _v_hill is not None
-                          else _cost.get("band") == "hillside"))
+                          else _cost.get("band") in ("hillside",
+                                                     "designated-hillside-benign-soil")),
+                zone=(str(_v_zone) if _v_zone else "R1"))
             build = be.get("best_sqft")
             upside = be.get("eo1_upside") or be.get("eo8_bonus")
-            build_basis = ("EO8 zoning (R1 0.45 FAR)" if be.get("best_path") == "EO8 zoning"
-                           else "EO1 base (rebuild same massing)")
+            if be.get("best_path") == "EO8 zoning":
+                _b = be.get("bho")
+                if _b and not _b.get("exact"):
+                    build_basis = (f"BHO guaranteed minimum, {_b['zone']} "
+                                   f"({be['rfa_min']:,}-{be['rfa_max']:,} sf range)")
+                elif _b:
+                    build_basis = f"BHO slope-band RFA, {_b['zone']}"
+                else:
+                    build_basis = "EO8 zoning (R1 0.45 FAR, flat lot)"
+            else:
+                build_basis = "EO1 base (rebuild same massing)"
             envelope = be
         f.update(Buildable=build, build_basis=build_basis, upside=upside,
                  envelope=envelope)

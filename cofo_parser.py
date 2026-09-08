@@ -56,6 +56,94 @@ def _all_numbers_on_line(line: str) -> list:
     return [n for n in (_num(x) for x in re.findall(r"(\d[\d,]*\.?\d*)", line)) if n is not None]
 
 
+_FT_IN = r"(\d+)\s*(?:'|\u2019|ft\b|feet\b)?\s*(?:(\d{1,2})\s*(?:\"|\u201d|in\b)?)?"
+_DIM_RE = re.compile(_FT_IN + r"\s*[xX\u00d7]\s*" + _FT_IN)
+
+
+def _feet(whole: str, inches: Optional[str]) -> float:
+    return float(whole) + (float(inches) / 12.0 if inches else 0.0)
+
+
+def parse_narrative_dimensions(text: str) -> dict:
+    """
+    Read the PRE-1990 certificate format, where the building is a prose sentence.
+
+    Certificates before roughly 1990 carry no structural inventory. They read:
+
+        One story, Type V, 82' x 30', one family dwelling and attached garage,
+        2 parking spaces required and provided, R-1 occupancy.
+
+        One story, type v, 20'9" x 24'3" irregular shaped addition to an
+        existing single family dwelling.
+
+    Until 8 Sep 2026 the parser returned ok=False on both and the operator was told
+    to paste a structural inventory that does not exist on the document. That format
+    covers the 1950s to 1970s Palisades stock, which is precisely the cheap lots with
+    small old houses where EO8 beats EO1 and where the decision is closest.
+
+    THREE CAUTIONS, all returned as notes rather than silently absorbed:
+
+      1. The dimension is the OUTSIDE footprint and on these certificates it usually
+         covers "dwelling AND attached garage". It is gross, not habitable. Do not
+         compare it to an Assessor living-area figure without saying so.
+      2. "irregular shaped" means the rectangle is an upper bound, not the area.
+      3. Storeys multiply it. "One story" means footprint equals gross; a two-storey
+         certificate does not.
+    """
+    out: dict = {}
+    notes: list = []
+    low = text.lower()
+
+    m = _DIM_RE.search(text)
+    if not m:
+        return dict(ok=False, notes=[])
+    w = _feet(m.group(1), m.group(2))
+    d = _feet(m.group(3), m.group(4))
+    if w < 8 or d < 8 or w > 400 or d > 400:
+        return dict(ok=False, notes=[])
+
+    area = round(w * d)
+    storeys = 1
+    if re.search(r"\btwo[ -]stor(y|ies)\b|\b2[ -]stor(y|ies)\b", low):
+        storeys = 2
+    elif re.search(r"\bthree[ -]stor(y|ies)\b|\b3[ -]stor(y|ies)\b", low):
+        storeys = 3
+
+    out["footprint_sqft"] = area
+    out["stories"] = storeys
+    out["narrative_gross_sqft"] = area * storeys
+    out["dimension_text"] = m.group(0)
+
+    notes.append(
+        f"Read from the certificate text: {m.group(0)} = {area:,} sqft footprint"
+        + (f" over {storeys} storeys = {area*storeys:,} sqft gross." if storeys > 1
+           else ". Single storey, so footprint is gross."))
+
+    if "garage" in low:
+        out["includes_garage"] = True
+        notes.append(
+            "The certificate describes a dwelling AND attached garage inside this "
+            "dimension, so the figure is GROSS and includes the garage. A two-car "
+            "garage is roughly 400 sqft. Do not compare this to an Assessor living-area "
+            "number without adjusting, and do not treat it as habitable floor area.")
+    if "irregular" in low:
+        out["irregular"] = True
+        notes.append(
+            "The certificate says irregular shaped. The rectangle is an UPPER BOUND on "
+            "the area, not the area. Treat it as a ceiling and take the real figure "
+            "from the plot plan.")
+    if re.search(r"\bR-?1 occupancy\b", text, re.I):
+        notes.append(
+            "This certificate says 'R-1 occupancy'. That is the BUILDING occupancy "
+            "classification under the code of the day, NOT the zoning. It is not "
+            "evidence that the lot is zoned R1, and the EO8 envelope must not be "
+            "computed from it. Get the zone string from ZIMAS.")
+
+    out["ok"] = True
+    out["notes"] = notes
+    return out
+
+
 def parse_cofo(text: str) -> dict:
     """
     Extract the fields the model needs from pasted Certificate of Occupancy text.
@@ -237,6 +325,20 @@ def parse_cofo(text: str) -> dict:
         notes.append(f"{out['basement_levels']} basement level(s) recorded. Under EO1 a "
                      f"basement adds neither footprint nor height, so it may sit on top "
                      f"of the rebuild envelope rather than inside it. Worth confirming.")
+
+    # PRE-1990 FALLBACK. No structural inventory on the document, so read the
+    # dimension out of the prose. This is the dominant format for the 1950s-70s
+    # Palisades stock and the parser used to return ok=False on all of it.
+    if not prior:
+        nar = parse_narrative_dimensions(blob)
+        if nar.get("ok"):
+            out.update({k: v for k, v in nar.items() if k not in ("ok", "notes")})
+            notes.extend(nar["notes"])
+            prior = nar["narrative_gross_sqft"]
+            out["floor_area_sqft"] = prior
+            out["floor_area_source"] = "certificate dimensions (gross)"
+            out["prior_sqft"] = prior
+            out["prior_sqft_source"] = "CERTIFIED"
 
     out["ok"] = bool(prior or out.get("lot_sqft"))
     out["notes"] = notes

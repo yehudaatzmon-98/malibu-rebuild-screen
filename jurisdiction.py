@@ -54,6 +54,7 @@ UNKNOWN JURISDICTIONS FAIL LOUD
 """
 
 from __future__ import annotations
+import bho
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -145,6 +146,8 @@ def route(situs_city: Optional[str]) -> Jurisdiction:
 
 
 def eo8_zoning_envelope(lot_sqft: Optional[float], coastal: bool = False,
+                        zone: Optional[str] = None,
+                        slope_bands: Optional[dict] = None, bonus: bool = True,
                         hillside: bool = False) -> dict:
     """
     THE EO8 PATH — where the prior structure is NOT the ceiling.
@@ -194,11 +197,19 @@ def eo8_zoning_envelope(lot_sqft: Optional[float], coastal: bool = False,
             "LAMC 12.21.1 A. Confirm the applicable limit on ZIMAS before assuming "
             "either envelope."))
     if hillside:
-        return dict(base=None, flagged=True, note=(
-            "<b>Hillside lot — Baseline Hillside Ordinance governs.</b> FAR slides "
-            "from about 0.50 down to 0.30 or lower as slope increases, and can reach "
-            "zero on the steepest bands. Needs the slope analysis, not a flat-lot "
-            "ratio."))
+        # Until 8 Sep 2026 this returned None and the lot dropped out of the ranking
+        # entirely — 77 of 132 Palisades lots on the Sep 2026 export. The ordinance
+        # guarantees a FLOOR on every hillside lot, so a range is always available.
+        b = bho.bho_rfa(zone, lot_sqft, bands_sqft=slope_bands, bonus=bonus)
+        if not b.get("ok"):
+            return dict(base=None, flagged=True, note=b.get("note"))
+        return dict(base=b.get("rfa") or b["rfa_min"],
+                    base_min=b["rfa_min"], base_max=b["rfa_max"],
+                    exact=b["exact"], bho=b, zone=b["zone"],
+                    guaranteed_min=b["guaranteed_min"],
+                    bonus=(b.get("rfa") or b["rfa_max"]),
+                    height_ft=b["height_ft"][0], garage_exempt=400,
+                    note=b["note"])
 
     base = round(lot_sqft * 0.45)
     bonus = round(base * 1.20)
@@ -222,7 +233,9 @@ COMP_SUPPORTED_SQFT = 7_000
 
 def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = None,
                   storeys: Optional[int] = None, prior_height_ft: Optional[float] = None,
-                  coastal: bool = False, hillside: bool = False) -> dict:
+                  coastal: bool = False, hillside: bool = False,
+                  zone: Optional[str] = None, slope_bands: Optional[dict] = None,
+                  bonus: bool = True) -> dict:
     """
     Take the GREATER of the EO1 rebuild envelope and the EO8 zoning envelope.
 
@@ -237,7 +250,8 @@ def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = N
     height we infer conservatively from storey count.
     """
     eo1 = la_envelope_estimate(prior_gross_sqft, lot_sqft=lot_sqft, storeys=storeys)
-    eo8 = eo8_zoning_envelope(lot_sqft, coastal=coastal, hillside=hillside)
+    eo8 = eo8_zoning_envelope(lot_sqft, coastal=coastal, hillside=hillside,
+                              zone=zone, slope_bands=slope_bands, bonus=bonus)
 
     eo1_base = eo1.get("base")
     eo1_upside = eo1.get("upside")
@@ -293,9 +307,21 @@ def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = N
             f"this size is a trophy product with a handful of buyers, not a spec "
             f"exit at a median. Underwrite it separately or not at all.")
 
+    # On an unresolved hillside lot, rank on the guaranteed minimum and carry the
+    # rest as unpriced. Rule 4: range, not verdict.
+    if eo8.get("bho") and not eo8["bho"]["exact"] and best[1] == "EO8 zoning":
+        ranked_sqft = max(eo1_base or 0, eo8["base_min"]) or eo8["base_min"]
+        note_parts.append(
+            f"<b>Slope analysis outstanding.</b> BHO puts RFA between "
+            f"{eo8['base_min']:,} and {eo8['base_max']:,} sqft. The ranking uses the "
+            f"guaranteed minimum. Everything above it is real but unpriced until a "
+            f"stamped Slope Analysis Map exists.")
+
     return dict(
         best_sqft=ranked_sqft, best_path=best[1], legal_sqft=best[0],
         unpriced_sqft=unpriced,
+        bho=eo8.get("bho"), rfa_min=eo8.get("base_min"), rfa_max=eo8.get("base_max"),
+        rfa_exact=eo8.get("exact"),
         eo1_base=eo1_base, eo1_upside=eo1_upside, eo1_note=eo1.get("note"),
         eo8_base=eo8_base, eo8_bonus=eo8.get("bonus"), eo8_note=eo8.get("note"),
         height_blocks_storey=height_blocks_storey,
