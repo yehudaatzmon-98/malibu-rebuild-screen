@@ -15,6 +15,7 @@ they're one product.
 Run:  streamlit run app.py
 """
 import io
+import os
 import re
 import pandas as pd
 import streamlit as st
@@ -611,19 +612,57 @@ def _akey(a) -> str:
     a = re.sub(r"\b9\d{4}\b", " ", a)
     return " ".join(a.split())
 
-_vrec = st.session_state.get("_verified_records") or {}
+# The vault above lives in session state, which Streamlit clears on every restart.
+# Until 8 Sep 2026 that meant every verified figure had to be re-entered by hand each
+# session, and in practice it wasn't: 865 Oreo ranked on the Assessor's 4,896 sf for
+# days when 4,202 was certified and sitting in the file. Verified facts are findings,
+# not UI state, so they load from disk here and the session vault layers on top.
+def _load_verified_seed() -> dict:
+    _p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verified_records.csv")
+    if not os.path.exists(_p):
+        return {}
+    try:
+        _df = pd.read_csv(_p, dtype=str).fillna("")
+    except Exception:
+        return {}                      # a malformed seed must not take the app down
+    return {r["ADDRESS"]: {k: v for k, v in r.items() if str(v).strip() != ""}
+            for _, r in _df.iterrows() if str(r.get("ADDRESS", "")).strip()}
+
+_vrec = dict(_load_verified_seed())
+_vrec.update(st.session_state.get("_verified_records") or {})   # session wins on conflict
 _joined, _unmatched = 0, []
 if _vrec:
     _by_key = {_akey(v.get("ADDRESS") or k): v for k, v in _vrec.items()}
     _cols = ("PRIOR_SQFT", "PRIOR_HEIGHT_FT", "PRIOR_STORIES", "BASEMENT_LEVELS",
              "LOT_SQFT", "ZONE", "COASTAL_ZONE", "HILLSIDE", "PRIOR_SQFT_SOURCE",
-             "COFO_NUMBER", "COFO_DATE")
+             "COFO_NUMBER", "COFO_DATE", "LANDSLIDE_ZONE", "APN", "NOTE")
     for _c in _cols:
         if _c not in raw.columns:
             raw[_c] = None
+    # Directional prefixes are inconsistent between sources: ZIMAS renders the same
+    # parcel as both "630 N BIENVENEDA AVE" and "630 BIENVENEDA AVE" on one report, and
+    # Redfin drops the N. _akey folds NORTH to N but never strips the bare letter, so
+    # those keys don't meet and the verified record is silently dropped. Fall back to a
+    # directional-free key, but ONLY where it resolves to exactly one record on each
+    # side. Attaching the wrong verified square footage to a lot is the precise failure
+    # this pipeline exists to prevent, so an ambiguous match is treated as no match.
+    def _akey_nd(a) -> str:
+        return " ".join(w for w in _akey(a).split() if w not in ("N", "S", "E", "W"))
+
+    _nd_counts: dict = {}
+    for _k in _by_key:
+        _nd_counts[_akey_nd(_k)] = _nd_counts.get(_akey_nd(_k), 0) + 1
+    _row_nd_counts: dict = {}
+    for _a in raw[addr_col]:
+        _row_nd_counts[_akey_nd(_a)] = _row_nd_counts.get(_akey_nd(_a), 0) + 1
+    _by_nd = {_akey_nd(_k): _v for _k, _v in _by_key.items()
+              if _nd_counts.get(_akey_nd(_k)) == 1}
+
     _hit = set()
     for _i, _a in raw[addr_col].items():
         _v = _by_key.get(_akey(_a))
+        if not _v and _row_nd_counts.get(_akey_nd(_a)) == 1:
+            _v = _by_nd.get(_akey_nd(_a))
         if not _v:
             continue
         _hit.add(_akey(_a)); _joined += 1
@@ -653,7 +692,7 @@ if _vrec:
 # BHO floor-area module, zone-aware EO8 envelope, C of O vault
 # join, PRIOR_SQFT_SOURCE fix, rewritten construction bands. Facts cached under
 # v3 carry the old 0.45 flat-lot envelope and must not be reused.
-_sig = f"v5-{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
+_sig = f"v6-{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
 if st.session_state.get("_batch_sig") != _sig:
     st.session_state["_batch_sig"] = _sig
     st.session_state["_facts"] = None
