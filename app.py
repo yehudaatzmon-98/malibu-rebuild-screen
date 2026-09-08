@@ -21,6 +21,38 @@ import streamlit as st
 
 import county
 import jurisdiction as jur
+
+# ---------------------------------------------------------------------------
+# MODULE VERSION GUARD. Streamlit redacts exception text, so a partial push shows
+# up as a bare "TypeError" with no cause. That happened on 8 Sep 2026: app.py v5
+# passed prior_footprint_sqft to a best_envelope that predated the argument.
+# Fail here, with the actual reason, rather than 700 lines later.
+# ---------------------------------------------------------------------------
+def _require(mod, name, args=()):
+    import inspect
+    fn = getattr(mod, name, None)
+    if fn is None:
+        return f"{mod.__name__}.{name}() is missing"
+    sig = set(inspect.signature(fn).parameters)
+    missing = [a for a in args if a not in sig]
+    if missing:
+        return (f"{mod.__name__}.{name}() does not accept {', '.join(missing)}")
+    return None
+
+_skew = [e for e in (
+    _require(jur, "best_envelope", ("prior_footprint_sqft", "zone", "slope_bands")),
+    _require(jur, "eo1_envelope", ("prior_footprint_sqft", "prior_height_ft")),
+    _require(jur, "eo_fee_and_deadline_flags", ("prior_gross_sqft", "new_gross_sqft")),
+) if e]
+try:
+    import bho  # noqa: F401
+except ImportError:
+    _skew.append("bho.py is missing from the deployment")
+if _skew:
+    st.error("**Some files did not deploy.** " + "; ".join(_skew) +
+             ". Push the matching versions of app.py, jurisdiction.py and bho.py "
+             "together — they changed in the same commit and do not work apart.")
+    st.stop()
 from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
 import guide
