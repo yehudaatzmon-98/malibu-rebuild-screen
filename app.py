@@ -57,6 +57,7 @@ if _skew:
 from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
 import guide
+import market as mkt_burn
 import decide
 import decide_ui
 from engine import (BUILD, Assumptions, CompMarket, ProForma, sensitivity,
@@ -874,6 +875,14 @@ def _gather_facts(raw, addr_col, mkt):
         f.update(Buildable=build, build_basis=build_basis, upside=upside,
                  envelope=envelope)
 
+        # Burn-footprint status. Captured here because lat/lon are already
+        # resolved. None means UNSCREENED: a lot with no coordinates does not
+        # get to skip the adjustment, it gets flagged.
+        f["burn_zone"] = mkt_burn.in_burn_zone(
+            None if pd.isna(lat) else float(lat),
+            None if pd.isna(lon) else float(lon),
+            zip_code=f.get("ZIP"))
+
         if build:
             m = mkt.match(j.code, build, lat if not pd.isna(lat) else None,
                           lon if not pd.isna(lon) else None)
@@ -916,7 +925,19 @@ def _score(f, a_, discount_):
     """Return a display row for one lot under the current assumptions + overrides."""
     o = overrides.get(f["Address"], {})
     build = o.get("build") or f["Buildable"]
-    basis = o.get("exit_psf") or f["comp_basis"]
+    _raw_basis = o.get("exit_psf") or f["comp_basis"]
+
+    # THE BURN ADJUSTMENT. The comp medians pool sales either side of 7 Jan 2025
+    # and either side of the fire footprint. Standing homes inside the footprint
+    # repriced down about 17% (market.py). An explicit per-lot override is taken
+    # at face value; anything derived from the comp pool is adjusted.
+    if _raw_basis and not o.get("exit_psf"):
+        _ep = mkt_burn.exit_price(float(_raw_basis), f.get("burn_zone"),
+                                  burn_recovery=getattr(a_, "burn_recovery", 0.0))
+        basis = _ep.psf
+    else:
+        _ep = None
+        basis = _raw_basis
     ask = f["Price"]
     # per-lot offer price wins over the global discount scenario
     if o.get("offer"):
@@ -1016,6 +1037,11 @@ def _score(f, a_, discount_):
     row["_rank_score"] = rank_score(_mm["margin"] if _mm else None,
                                     _v.weight, bool(_v.height_ft))
     row["_rti"] = bool(f.get("rti"))
+    row["_burn"] = f.get("burn_zone")
+    row["_exit_adj"] = _ep
+    row["_land"] = (mkt_burn.land_verdict(float(f["Price"]), float(build), float(basis),
+                                          construction_psf=float(a_.construction_psf))
+                    if (f.get("Price") and build and basis) else None)
     # rebuild the card now that we know the walk-away number, so step 4 carries it
     row["_card"] = build_card(
         address=f["Address"], jurisdiction=f["jcode"], prior_sqft=f["prior_sqft"],
@@ -1523,6 +1549,10 @@ _view = df[~df.Address.astype(str).str.strip().str.lower().isin(["nan", "none", 
 def _table_row(x):
     mm = (x.get("_margin") if isinstance(x.get("_margin"), dict) else {})
     v = x.get("_verified")
+    _ld = x.get("_land") if isinstance(x.get("_land"), dict) else None
+    if _ld and not _ld.get("priceable"):
+        _ld = None
+    _b = x.get("_burn")
     return {
         "★": x.Address in shortlist,
         "Address": x.Address,
@@ -1535,6 +1565,13 @@ def _table_row(x):
         "$/buildable ft": (f"${x.Price / x.Buildable:,.0f}"
                            if pd.notna(x.Price) and pd.notna(x.Buildable) and x.Buildable
                            else "—"),
+        # The screen that replaces the ask. Palisades land is priced per lot while
+        # R1 caps floor area per lot, so an ask means nothing until it is divided
+        # by what can be built. Two lots at the same ask differ threefold here.
+        "Breakeven land $/ft": (f"${_ld['breakeven_land_psf']:,.0f}" if _ld else "—"),
+        "Clears?": ("—" if not _ld
+                    else "yes" if _ld["clears_breakeven"] else "NO"),
+        "Burn zone": ("UNSCREENED" if _b is None else "yes" if _b else "no"),
         # ROC deliberately not shown here. It moves with whatever exit price you
         # assume, so it invites ranking on the least knowable input in the model.
         # It is still on the single-property screen, where the assumption is visible.
@@ -1544,7 +1581,9 @@ def _table_row(x):
 _table = pd.DataFrame([_table_row(x) for _, x in _view.iterrows()])
 
 st.markdown("#### The list")
-st.markdown('<span class="cite">Sorted by margin over market — how far above the '
+st.markdown('<span class="cite">Exit prices are adjusted for the post-fire burn-zone '
+            'repricing; set the recovery bet in the sidebar to see the deal on the '
+            'other assumption. Sorted by margin over market — how far above the '
             'comparable median each lot has to sell just to break even, with unverified '
             'figures penalised. Click any column header to re-sort. Tick ★ to shortlist. '
             'Pick one below for the full underwriting.</span>', unsafe_allow_html=True)
@@ -1563,6 +1602,23 @@ if len(_table):
             "Verified": st.column_config.TextColumn(
                 help="Whether the prior square footage comes from a Certificate of "
                      "Occupancy or original permit rather than a sheet or listing."),
+            "Breakeven land $/ft": st.column_config.TextColumn(
+                help="Land dollars per BUILDABLE foot at which this lot returns zero. "
+                     "Compare against $/buildable ft to its left. Palisades land is "
+                     "priced per lot while R1 caps floor area per lot, so the ask on "
+                     "its own says nothing about whether a lot works."),
+            "Clears?": st.column_config.TextColumn(
+                help="Whether the ask is at or below breakeven land value. NO means "
+                     "the lot cannot work at the asking price under the current "
+                     "assumptions, however good it looks on every other measure."),
+            "Burn zone": st.column_config.TextColumn(
+                help="Inside the fire footprint. Standing homes inside it repriced "
+                     "down about 17% after 7 Jan 2025 (95% CI -31% to -0.3%); homes "
+                     "outside did not move. The exit basis is adjusted accordingly. "
+                     "UNSCREENED means no coordinates: the adjustment is applied "
+                     "anyway, because an unverified lot must not outrank a verified "
+                     "one. Footprint is a longitude proxy, not the CAL FIRE "
+                     "perimeter. GAP."),
         }))
     if _edited is not None and "★" in _edited.columns:
         for _i, _r in _edited.iterrows():
