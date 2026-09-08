@@ -1026,6 +1026,108 @@ else:
                         na_position="last").drop(columns="_t")
 
 n_scored = df.ROC.notna().sum()
+
+# ------------------------------------------------------------------------------
+# GATES. Run BEFORE the ranking, not as a sort key.
+#
+# Until 9 Sep 2026 all 138 lots were ranked and the criteria were applied by eye
+# afterwards. That meant the top of the list showed lots that could not be financed
+# under the agreed structure, and it meant every change to the criteria reopened the
+# whole list. Four times in three weeks the criteria moved after the analysis was
+# done. Verification is expensive and disqualification is cheap, so disqualification
+# goes first. A lot either clears a gate or it is out; there is no scoring here.
+#
+# Gates 1, 2 and 5 run on the export alone. Gates 3 and 4 need a ZIMAS pull per lot
+# and are applied from the verified record once it exists, so a lot with no ZIMAS yet
+# is shown as UNSCREENED rather than passed. Absence of a flag is not a clear flag.
+# ------------------------------------------------------------------------------
+_g = st.sidebar.expander("Gates — screen before ranking", expanded=True)
+_gate_on   = _g.checkbox("Apply gates", True,
+                         help="Off shows the unfiltered ranking, which is what the "
+                              "tool did before 9 Sep 2026.")
+_max_ask   = _g.number_input("Max ask ($)", 0, 20_000_000, 1_250_000, 50_000,
+                             help="At 80% LTC with $720K equity the project supports "
+                                  "about $3.6M. Tal's worked example is $2.5M build "
+                                  "plus $1.1M land.")
+_min_lot   = _g.number_input("Min lot (sf)", 0, 40_000, 6_000, 500,
+                             help="Below roughly 6,000 sf the R1/BHO envelope caps "
+                                  "under 2,500 sf and the build stops carrying the "
+                                  "land price. 630 Bienveneda at 4,681 sf is the case.")
+_no_hill   = _g.checkbox("Exclude Hillside Area", True,
+                         help="Tal, 1 Sep 2026: not on the first property.")
+_no_coast  = _g.checkbox("Exclude Coastal COMMISSION-permit lots", True,
+                         help="Tal, 9 Sep 2026: avoid Coastal Commission permit lots "
+                              "specifically, not the Coastal Zone as a whole. Dual "
+                              "Permit Jurisdiction and Commission retained "
+                              "jurisdiction are out. A ministerial Categorical "
+                              "Exclusion under Order E-79-8 is acceptable.")
+_no_highl  = _g.checkbox("Exclude Palisades Highlands", True,
+                         help="CDP A-381-78 conditions have never been read.")
+
+if _gate_on:
+    _fails, _n0 = [], len(df)
+
+    def _flag(_x, *names):
+        for _n in names:
+            if _n in df.columns:
+                _v = _x.get(_n)
+                if _v is not None and str(_v).strip() != "":
+                    return str(_v).strip().upper()
+        return None
+
+    _keep = []
+    for _i, _x in df.iterrows():
+        _why = []
+        _ask = _x.get("Price")
+        _lot = _x.get("lot_sqft") if "lot_sqft" in df.columns else _x.get("LOT SIZE")
+        if _max_ask and pd.notna(_ask) and float(_ask) > _max_ask:
+            _why.append(f"ask ${float(_ask):,.0f}")
+        if _min_lot and pd.notna(_lot) and float(_lot) < _min_lot:
+            _why.append(f"lot {float(_lot):,.0f} sf")
+        _h = _flag(_x, "HILLSIDE")
+        if _no_hill and _h and _h.startswith(("Y", "TRUE")):
+            _why.append("Hillside Area")
+        # Coastal is a permit-regime test, not a yes/no on the zone. Tal's constraint
+        # (9 Sep 2026) is Coastal Commission permits, and the regimes differ sharply:
+        # a Categorical Exclusion under Order E-79-8 is issued by the City and is
+        # ministerial with a 10-working-day Commission review, while Dual Permit
+        # Jurisdiction and retained jurisdiction put the Commission in the approval
+        # path. Testing the zone alone excluded most of the Palisades for no reason.
+        # Where CATEX is present it governs, so it is checked first.
+        _c = _flag(_x, "COASTAL_ZONE")
+        if _no_coast and _c and _c not in ("NO", "NONE", "FALSE",
+                                           "NOT IN COASTAL ZONE"):
+            if "CATEGORICAL EXCLUSION" in _c or "CATEX" in _c or "CALVO" in _c:
+                pass                      # ministerial, City-issued: acceptable
+            elif ("DUAL PERMIT" in _c or "RETAINED" in _c
+                  or "COMMISSION PERMIT" in _c or "A-381-78" in _c):
+                _why.append("Coastal Commission permit")
+            else:
+                _why.append(f"coastal regime unclear ({_c[:40]})")
+        _lat = _x.get("LATITUDE")
+        if _no_highl and pd.notna(_lat) and float(_lat) >= 34.072:
+            _why.append("Palisades Highlands")
+        if _why:
+            _fails.append((_x.get("Address", _i), "; ".join(_why)))
+        else:
+            _keep.append(_i)
+
+    df = df.loc[_keep]
+    n_scored = df.ROC.notna().sum()
+    st.markdown("---")
+    st.markdown(f"#### Gates: {len(df)} of {_n0} lots remain")
+    _unscr = sum(1 for _, _x in df.iterrows()
+                 if not _flag(_x, "HILLSIDE") or not _flag(_x, "COASTAL_ZONE"))
+    if _unscr:
+        st.warning(f"{_unscr} of the {len(df)} survivors have no ZIMAS on file, so the "
+                   f"hillside and coastal gates could not be tested on them. They are "
+                   f"UNSCREENED, not passed. Pull the Parcel Profile Report before "
+                   f"spending anything on them.")
+    if _fails:
+        with st.expander(f"{len(_fails)} lots excluded — and why"):
+            st.dataframe(pd.DataFrame(_fails, columns=["Address", "Failed"]),
+                         hide_index=True, use_container_width=True)
+
 st.markdown("---")
 st.markdown(f"### Results — {len(df)} lots, best to worst")
 st.markdown(f'<span class="cite">{n_scored} priceable · {len(df)-n_scored} eligible but '
