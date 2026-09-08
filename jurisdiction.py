@@ -231,8 +231,197 @@ def eo8_zoning_envelope(lot_sqft: Optional[float], coastal: bool = False,
 COMP_SUPPORTED_SQFT = 7_000
 
 
+# ---------------------------------------------------------------------------
+# EO1 AND EO8 ARE MUTUALLY EXCLUSIVE REGIMES. Rewritten 8 Sep 2026.
+#
+# From the LADBS "Implementation Guidelines for Emergency Executive Order No. 1",
+# version 4.0, 11 June 2026:
+#
+#   "An EO1 Eligible Project shall not be combined with an EO8 Eligible Project"
+#   (one exception: a swimming pool and its supporting retaining walls).
+#
+# So this is a CHOICE of regime, not two numbers to compare and take the larger of.
+# The two are governed differently and the difference is not cosmetic:
+#
+#   EO1  regulates FOOTPRINT and HEIGHT. It does not regulate floor area at all.
+#        "An Eligible Project may be replaced or rebuilt with the same nonconforming
+#        conditions as the structure that existed immediately before the Wildfires."
+#        A prior house exceeding the Baseline Hillside Ordinance floor-area cap was
+#        legal nonconforming, and EO1 carries that forward. BHO DOES NOT BIND HERE.
+#        No City Planning review and no building permit clearances at all.
+#
+#   EO8  is for ZONING-COMPLIANT projects. BHO binds in full. In exchange the prior
+#        structure stops being the ceiling and local Coastal Act and CEQA review are
+#        bypassed.
+#
+# The old code computed EO1 as prior_gross x 1.10 and took the max against EO8. Two
+# errors. EO1 is not a floor-area rule, so gross x 1.10 understates any lot whose
+# prior was single-storey with height to spare; and taking the max implied the two
+# could be blended, which they cannot.
+# ---------------------------------------------------------------------------
+
+MIN_STOREY_HEIGHT_FT = 10.0   # floor assembly plus a habitable ceiling
+GARAGE_FOOTPRINT_FREE_SQFT = 400   # EO1: attached garage up to 400 sf is free
+
+
+def eo1_envelope(prior_gross_sqft: Optional[int] = None,
+                 prior_footprint_sqft: Optional[float] = None,
+                 storeys: Optional[int] = None,
+                 prior_height_ft: Optional[float] = None,
+                 lot_sqft: Optional[float] = None) -> dict:
+    """
+    The EO1 envelope, computed the way the order actually works.
+
+        footprint_max = prior footprint x 1.10
+        height_max    = prior height x 1.10
+        storeys_max   = height_max / 10 ft, never fewer than the storeys that stood
+        gross         = footprint_max x storeys_max
+
+    "Adding a new story will not disqualify the project ... provided the story is
+    built within the Building Footprint and Height." So storeys multiply the
+    footprint, and the binding constraint is height, not area.
+
+    Three things sit OUTSIDE the 110% cap and are returned separately rather than
+    folded in, because each depends on a design nobody has drawn yet:
+
+      - up to 400 sf of attached garage does not count toward the footprint
+      - a basement is permitted to the full 110% footprint
+      - a new attached ADU does not count against the 110% at all, and a detached
+        ADU is an Eligible Project in its own right
+
+    Where prior footprint is unknown it is estimated as gross / storeys. That
+    assumes every floor has the same area and real houses rarely do, so the estimate
+    is tagged and the caller should treat it as a bracket.
+    """
+    notes = []
+    if not prior_footprint_sqft and not prior_gross_sqft:
+        return dict(ok=False, base=None, note=(
+            "EO1 needs the prior building footprint, or prior gross plus storey count. "
+            "LADBS accepts issued building permits, a Certificate of Occupancy, County "
+            "Assessor records or Coastal Commission documents to establish it."))
+
+    if not storeys:
+        storeys = 2 if (prior_gross_sqft or 0) > 2200 else 1
+        notes.append(f"Storey count inferred from size ({storeys}). Supply it if known.")
+
+    footprint = prior_footprint_sqft
+    if not footprint:
+        footprint = prior_gross_sqft / storeys
+        notes.append(
+            f"Footprint estimated as gross / storeys = {footprint:,.0f} sf. This assumes "
+            f"equal floor plates. A 3,339 sf two-storey home is commonly 2,000 down and "
+            f"1,339 up, which is a 2,000 sf footprint, not 1,670. Under EO1 that gap is "
+            f"363 sf of permitted footprint and it compounds on every storey. Treat as a "
+            f"bracket until a plot plan or C of O confirms it.")
+
+    footprint_max = footprint * 1.10
+
+    # Physical ceiling: lot coverage. 40% under BHO, 45% on a standard flat R1 lot.
+    coverage_cap = round(lot_sqft * 0.40) if lot_sqft else None
+    if coverage_cap and footprint_max > coverage_cap:
+        notes.append(
+            f"110% of the prior footprint ({footprint_max:,.0f} sf) exceeds the 40% lot "
+            f"coverage limit ({coverage_cap:,} sf). Coverage governs.")
+        footprint_max = coverage_cap
+
+    storeys_max = storeys
+    height_max = None
+    if prior_height_ft:
+        height_max = prior_height_ft * 1.10
+        storeys_max = max(storeys, int(height_max // MIN_STOREY_HEIGHT_FT))
+        if storeys_max == storeys and storeys == 1:
+            notes.append(
+                f"<b>Height forecloses a second storey.</b> Prior height "
+                f"{prior_height_ft:.0f} ft x 1.10 = {height_max:.1f} ft, which will not "
+                f"take two storeys at {MIN_STOREY_HEIGHT_FT:.0f} ft each. EO1 yields a "
+                f"single storey here no matter how large the footprint.")
+    else:
+        notes.append(
+            "Prior height unknown, so the storey count is held at what stood. This is "
+            "the conservative read and it may understate a low single-storey lot with "
+            "height to spare. Height is on the Certificate of Occupancy as Height (ZC).")
+
+    gross = round(footprint_max * storeys_max)
+
+    additive = dict(
+        attached_garage=GARAGE_FOOTPRINT_FREE_SQFT,
+        basement_max=round(footprint_max),
+        attached_adu="uncapped by the 110% footprint; governed by LAMC 12.22.A.33 and GC 66323",
+        note=("None of these count against the 110% footprint. A basement to the full "
+              "110% footprint is expressly an Eligible Project, and on these lots it is "
+              "the largest single lever on saleable area. It is an ASSUMPTION until an "
+              "architect has drawn it against the topography, and it does not belong in "
+              "a base case before then. Below-grade area also does not price at the "
+              "same rate as above-grade, so any comp basis applied to it needs its own "
+              "haircut."))
+
+    return dict(ok=True, base=gross, footprint_prior=round(footprint),
+                footprint_max=round(footprint_max), storeys_prior=storeys,
+                storeys_max=storeys_max, height_max_ft=height_max,
+                coverage_cap=coverage_cap, additive=additive,
+                bho_applies=False,
+                note=("<b>EO1: " + f"{gross:,} sf" + "</b> = footprint "
+                      f"{footprint_max:,.0f} sf x {storeys_max} storey(s). EO1 caps "
+                      "footprint and height, NOT floor area, and permits the same "
+                      "nonconforming conditions that existed before the fire, so the "
+                      "Baseline Hillside Ordinance floor-area cap does not bind on this "
+                      "path. No City Planning review or permit clearances."
+                      + ("<br>" + "<br>".join(notes) if notes else "")))
+
+
+def eo_fee_and_deadline_flags(prior_gross_sqft: Optional[float],
+                              new_gross_sqft: Optional[float],
+                              months_to_build: float = 35.0,
+                              permit_by_year: int = 2032) -> dict:
+    """
+    Fee triggers and the time limit, neither of which the pro forma carried.
+
+    EO7 suspends permit and plan check fees, but LAUSD and Linkage fees are expressly
+    NOT subject to EO7. Reporting also indicates the EO7 suspension is limited to
+    owners who held the property as of the fire date, which would exclude a post-fire
+    purchaser entirely; the Implementation Guidelines state the suspension without
+    that qualifier. The conflict is unresolved, so this returns the flag and does not
+    net the fee out.
+    """
+    out = dict(lausd=False, linkage=False, added_sqft=None,
+               eo7_uncertain=True, deadline_ok=None, notes=[])
+    if prior_gross_sqft and new_gross_sqft:
+        added = new_gross_sqft - prior_gross_sqft
+        out["added_sqft"] = round(added)
+        if added > 500:
+            out["lausd"] = True
+            out["notes"].append(
+                f"LAUSD school fees apply: the addition is {added:,.0f} sf, over the "
+                f"500 sf threshold, and is assessed on the added area. Not suspended "
+                f"by EO7.")
+        if added > 1500:
+            out["linkage"] = True
+            out["notes"].append(
+                f"Affordable Housing Linkage Fee applies: net increase of {added:,.0f} "
+                f"sf exceeds 1,500 sf. Not suspended by EO7.")
+    out["notes"].append(
+        "EO7 suspends permit and plan check fees, but the suspension may be limited to "
+        "owners of record as of 7 January 2025. A post-fire purchaser is not that. "
+        "Carry the fees until counsel or LADBS confirms otherwise.")
+
+    # Permits by 13 January 2032, work complete within 3 years of issuance.
+    from datetime import date
+    months_left = (date(permit_by_year, 1, 13).year - date.today().year) * 12 + \
+                  (1 - date.today().month)
+    out["months_to_permit_deadline"] = months_left
+    out["deadline_ok"] = months_left > 0 and months_to_build <= 36
+    if months_to_build > 36:
+        out["notes"].append(
+            f"Construction must complete within 3 years (36 months) of permit issuance. "
+            f"At a {months_to_build:.0f}-month schedule this needs an LADBS extension, "
+            f"which is discretionary. Two comparable Palisades builds ran 34 and 35 "
+            f"months, so the margin is thin rather than absent.")
+    return out
+
+
 def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = None,
                   storeys: Optional[int] = None, prior_height_ft: Optional[float] = None,
+                  prior_footprint_sqft: Optional[float] = None,
                   coastal: bool = False, hillside: bool = False,
                   zone: Optional[str] = None, slope_bands: Optional[dict] = None,
                   bonus: bool = True) -> dict:
@@ -249,29 +438,41 @@ def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = N
     second storey and collapses the EO1 case regardless of footprint. Without the
     height we infer conservatively from storey count.
     """
-    eo1 = la_envelope_estimate(prior_gross_sqft, lot_sqft=lot_sqft, storeys=storeys)
+    eo1 = eo1_envelope(prior_gross_sqft=prior_gross_sqft,
+                       prior_footprint_sqft=prior_footprint_sqft,
+                       storeys=storeys, prior_height_ft=prior_height_ft,
+                       lot_sqft=lot_sqft)
     eo8 = eo8_zoning_envelope(lot_sqft, coastal=coastal, hillside=hillside,
                               zone=zone, slope_bands=slope_bands, bonus=bonus)
 
     eo1_base = eo1.get("base")
-    eo1_upside = eo1.get("upside")
-    # If prior height is known and low, the EO1 storey-add is not available.
-    height_blocks_storey = False
-    if prior_height_ft and prior_height_ft * 1.10 < 20:
-        height_blocks_storey = True
-        eo1_upside = None
+    eo1_upside = None   # EO1 upside now lives inside eo1_envelope's storey logic
+    height_blocks_storey = bool(prior_height_ft and eo1.get("storeys_max") == 1)
 
     eo8_base = eo8.get("base")
     candidates = [(eo1_base, "EO1 like-for-like"), (eo8_base, "EO8 zoning")]
     best = max((c for c in candidates if c[0]), key=lambda c: c[0], default=(None, None))
 
     note_parts = []
-    if height_blocks_storey:
+    # The paths cannot be blended. Say so wherever the choice is close, because a
+    # reader looking at two numbers will otherwise assume the larger is simply available.
+    if eo1_base and eo8_base:
+        gap = abs(eo1_base - eo8_base) / max(eo1_base, eo8_base)
         note_parts.append(
-            f"<b>EO1 height cap forecloses a second storey.</b> Prior height "
-            f"{prior_height_ft:.0f}ft × 1.10 = {prior_height_ft*1.10:.1f}ft, which will "
-            f"not accommodate two storeys. The EO1 route yields a single storey here "
-            f"regardless of footprint.")
+            f"<b>EO1 and EO8 are mutually exclusive.</b> EO1 gives {eo1_base:,} sf and "
+            f"caps footprint and height while carrying prior nonconforming floor area. "
+            f"EO8 gives {eo8_base:,} sf and requires full zoning compliance, so the "
+            f"Baseline Hillside Ordinance floor-area cap binds. You pick one regime; the "
+            f"order permits no combination except a pool and its retaining walls."
+            + (f" The two are within {gap:.0%} of each other here, so the choice turns on "
+               f"the additive items and the review path, not on the headline number."
+               if gap < 0.15 else ""))
+    if eo1.get("additive") and best[1] == "EO1 like-for-like":
+        _a = eo1["additive"]
+        note_parts.append(
+            f"On the EO1 path, outside the 110% cap: up to {_a['attached_garage']} sf of "
+            f"attached garage, a basement to {_a['basement_max']:,} sf, and an attached "
+            f"ADU. Each is real and none is in the ranked figure.")
     if eo1_base and eo8_base and eo8_base > eo1_base * 1.25:
         note_parts.append(
             f"<b>The zoning path is materially larger than the rebuild path</b> — "
@@ -322,6 +523,9 @@ def best_envelope(prior_gross_sqft: Optional[int], lot_sqft: Optional[float] = N
         unpriced_sqft=unpriced,
         bho=eo8.get("bho"), rfa_min=eo8.get("base_min"), rfa_max=eo8.get("base_max"),
         rfa_exact=eo8.get("exact"),
+        bho_binds=(best[1] == "EO8 zoning"),
+        eo1_additive=eo1.get("additive"), eo1_footprint_max=eo1.get("footprint_max"),
+        eo1_storeys_max=eo1.get("storeys_max"),
         eo1_base=eo1_base, eo1_upside=eo1_upside, eo1_note=eo1.get("note"),
         eo8_base=eo8_base, eo8_bonus=eo8.get("bonus"), eo8_note=eo8.get("note"),
         height_blocks_storey=height_blocks_storey,

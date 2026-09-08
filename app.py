@@ -616,10 +616,12 @@ if _vrec:
 # comp source so a new upload recomputes but widget clicks don't.
 # bump the version segment whenever the fact-gathering logic changes, or lots
 # cached by an older build linger with fields the display now expects.
-# v4 (8 Sep 2026): BHO floor-area module, zone-aware EO8 envelope, C of O vault
+# v5 (8 Sep 2026): EO1/EO8 split into mutually exclusive regimes, EO1 now
+# footprint-and-height driven rather than gross x 1.10. v4 added the
+# BHO floor-area module, zone-aware EO8 envelope, C of O vault
 # join, PRIOR_SQFT_SOURCE fix, rewritten construction bands. Facts cached under
 # v3 carry the old 0.45 flat-lot envelope and must not be reused.
-_sig = f"v4-{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
+_sig = f"v5-{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
 if st.session_state.get("_batch_sig") != _sig:
     st.session_state["_batch_sig"] = _sig
     st.session_state["_facts"] = None
@@ -755,8 +757,11 @@ def _gather_facts(raw, addr_col, mkt):
             # 2008 on, and getting them wrong is what produced a 5,050 sqft envelope on
             # an RE11 hillside lot and a 3,514 sqft one on an R1 hillside lot.
             _v_zone = _col("ZONE")
+            _v_fp   = _col("PRIOR_FOOTPRINT_SQFT", "FOOTPRINT_SQFT")
             be = jur.best_envelope(
                 p.prior_sqft, lot_sqft=p.lot_sqft,
+                prior_footprint_sqft=(float(_v_fp) if _v_fp else None),
+                storeys=(int(float(_col("PRIOR_STORIES"))) if _col("PRIOR_STORIES") else None),
                 prior_height_ft=(float(_v_height) if _v_height is not None else None),
                 coastal=bool(_v_coastal) if _v_coastal is not None else False,
                 hillside=(bool(_v_hill) if _v_hill is not None
@@ -775,7 +780,10 @@ def _gather_facts(raw, addr_col, mkt):
                 else:
                     build_basis = "EO8 zoning (R1 0.45 FAR, flat lot)"
             else:
-                build_basis = "EO1 base (rebuild same massing)"
+                build_basis = (f"EO1: footprint {be.get('eo1_footprint_max'):,} sf x "
+                               f"{be.get('eo1_storeys_max')} storey"
+                               if be.get("eo1_footprint_max")
+                               else "EO1 like-for-like")
             envelope = be
         f.update(Buildable=build, build_basis=build_basis, upside=upside,
                  envelope=envelope)
