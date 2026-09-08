@@ -62,7 +62,7 @@ _FLATS = (
     "galloway", "goucher", "hartzell", "haverford", "iliff", "kagawa", "marquette",
     "monument", "muskingum", "northfield", "ocampo", "oreo", "radcliffe",
     "swarthmore", "toyopa", "via de la paz", "friends", "hampden", "beirut",
-    "mount holyoke", "las lomas",
+    "mount holyoke", "las lomas ave",
 )
 
 # Hillside, bluff and canyon streets. Higher cost and usually longer schedule.
@@ -75,7 +75,7 @@ _HILLSIDE = (
     "via la costa", "via de las olas", "alta mura", "glenhaven", "las pulgas",
     "berea", "hightree", "lecco", "bellino", "chapala", "marinette", "tellem",
     "palmera", "bienveneda", "las casas", "erskine", "patterson", "livorno",
-    "akron", "scenic",
+    "akron", "scenic", "las lomas pl",
 )
 
 

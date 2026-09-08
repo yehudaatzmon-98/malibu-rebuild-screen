@@ -100,6 +100,35 @@ def parse_cofo(text: str) -> dict:
                         "this plus whatever the earlier certificate reported — check "
                         "for a second C of O before using it as the prior area.")
 
+        elif "occ. group" in low or "occ group" in low:
+            # THE FIX FOR THE 1228 LAS LOMAS CASE (8 Sep 2026).
+            #
+            # On a modern LADBS certificate issued against an ALTERATION permit, the
+            # "Floor Area (ZC)" line carries only the CHANGED value. The building's
+            # actual total lives in the occupancy-group rows:
+            #
+            #     Floor Area (ZC)   377 Sqft
+            #     R3 Occ. Group     377 Sqft      2934 Sqft
+            #     U Occ. Group     -377 Sqft         0 Sqft
+            #
+            # Read the first line alone and you get 377 sf for a 2,934 sf house. That
+            # is an error of 7.8x, and unlike every prior provenance failure on this
+            # project it UNDERSTATES rather than overstates, so it would have made a
+            # dead lot look alive rather than the reverse.
+            #
+            # R3 is the residential occupancy group and its TOTAL is the figure rebuild
+            # rights attach to. U is the garage: a conversion moves area from U to R3
+            # and the U total goes to zero, which is why summing groups is wrong.
+            # strip the group label first: "R3" contains a digit that would
+            # otherwise be read as a CHANGED value.
+            vals = _all_numbers_on_line(re.sub(r"^\s*[A-Z]?\d*\s*Occ\.?\s*Group",
+                                               "", line, flags=re.I))
+            grp = "R3" if "r3" in low else ("U" if low.strip().startswith("u ") else None)
+            if grp and len(vals) >= 2:
+                out.setdefault("occ_groups", {})[grp] = dict(changed=vals[0], total=vals[-1])
+            elif grp and vals:
+                out.setdefault("occ_groups", {})[grp] = dict(changed=vals[0], total=None)
+
         elif low.startswith("residential floor area"):
             v = _last_number_on_line(line)
             if v:
@@ -192,6 +221,7 @@ def parse_cofo(text: str) -> dict:
                      "the title report.")
 
     # ---- derived: the prior area the model should use ----
+    _apply_occ_group_total(out, notes)
     prior = out.get("floor_area_sqft")
     if prior:
         out["prior_sqft"] = prior
@@ -244,6 +274,25 @@ def extract_pdf_text(file_obj) -> dict:
             "from records.ladbs@lacity.org."))
     return dict(ok=True, text=text, pages=len(pages), scanned=False,
                 note=f"Read {len(pages)} page(s), {len(text):,} characters.")
+
+
+def _apply_occ_group_total(out: dict, notes: list) -> None:
+    """Prefer the R3 occupancy-group TOTAL over a CHANGED-only floor area."""
+    r3 = (out.get("occ_groups") or {}).get("R3") or {}
+    total = r3.get("total")
+    if not total:
+        return
+    fa = out.get("floor_area_sqft")
+    if fa is None or total > fa * 1.05:
+        out["floor_area_sqft"] = total
+        out["floor_area_source"] = "R3 occupancy group TOTAL"
+        notes.append(
+            f"Floor Area (ZC) on this certificate reads {fa:,.0f} sqft, which is the "
+            f"CHANGED value from an alteration permit. The R3 occupancy group reports a "
+            f"TOTAL of {total:,.0f} sqft, and that is the building. Using {total:,.0f}."
+            if fa else
+            f"No Floor Area (ZC) total on this certificate. Using the R3 occupancy "
+            f"group TOTAL of {total:,.0f} sqft.")
 
 
 def parse_cofo_pdf(file_obj) -> dict:
