@@ -58,6 +58,7 @@ from county import (Parcel, triage, envelope_both_cases, ceiling_from_year,
                     entitlement_status, thesis_fit)
 import guide
 import market as mkt_burn
+import intake
 import decide
 import decide_ui
 from engine import (BUILD, Assumptions, CompMarket, ProForma, sensitivity,
@@ -801,12 +802,18 @@ def _gather_facts(raw, addr_col, mkt):
                    ("RTI", "READY TO ISSUE", "READY-TO-ISSUE", "SHOVEL READY",
                     "SHOVEL-READY", "PERMITS IN HAND", "PERMITTED", "APPROVED PLANS",
                     "PLANS APPROVED", "FULLY ENTITLED", "ENTITLED"))
+        # GATE 0 / 0b, run on the listing text before anything is spent. Three
+        # lots sat in the pipeline for months and all three died on facts printed
+        # in their own remarks (see intake.py). Free, so it goes first.
+        _intake = intake.screen(_blob, prior_sqft=None, year_built=None)
+
         _cost = area_construction_cost(addr, default=a.construction_psf,
                                        lot_sqft=csv_lot)
         f = dict(Address=addr, Jurisdiction=j.name, jcode=j.code,
                  lat=(None if pd.isna(lat) else float(lat)),
                  lon=(None if pd.isna(lon) else float(lon)),
-                 rti=_rti, area_psf=_cost["psf"], area_band=_cost["band"],
+                 rti=_rti, intake=_intake,
+                 area_psf=_cost["psf"], area_band=_cost["band"],
                  area_why=_cost["why"], area_confidence=_cost.get("confidence"),
                  prior_height_ft=(float(_v_height) if _v_height is not None else None),
                  area_source=(str(_v_src).upper() if _v_src else None),
@@ -1038,6 +1045,7 @@ def _score(f, a_, discount_):
                                     _v.weight, bool(_v.height_ft))
     row["_rti"] = bool(f.get("rti"))
     row["_burn"] = f.get("burn_zone")
+    row["_intake"] = f.get("intake")
     row["_exit_adj"] = _ep
     row["_land"] = (mkt_burn.land_verdict(float(f["Price"]), float(build), float(basis),
                                           construction_psf=float(a_.construction_psf))
@@ -1086,6 +1094,24 @@ _g = st.sidebar.expander("Gates — screen before ranking", expanded=True)
 _gate_on   = _g.checkbox("Apply gates", True,
                          help="Off shows the unfiltered ranking, which is what the "
                               "tool did before 9 Sep 2026.")
+_gate_access = _g.checkbox("0 · Require legal street access", True,
+                           help="Fails a lot whose remarks describe a paper street, "
+                                "an undedicated right of way or no legal access. "
+                                "1552 and 1555 Reseda Blvd sat in the pipeline for "
+                                "ten months and are reached by parking and walking "
+                                "in on Sullivan Fire Road. No dedicated improved "
+                                "frontage means no building permit, and creating "
+                                "access means dedication and improvement plus LAFD "
+                                "sign-off on width, grade and turnaround.")
+_gate_built  = _g.checkbox("0b · Require a destroyed structure", True,
+                           help="Fails a lot that was never built on. EO1 and EO8 "
+                                "attach to a structure destroyed in the fire; a "
+                                "parcel that never held a house is an ordinary "
+                                "ground-up entitlement under full LAMC with full "
+                                "CEQA and Coastal review, and has no prior square "
+                                "footage to verify. 1785 Alta Mura is the case: cut "
+                                "from $2,495,000 to $999,000 over thirteen months "
+                                "and still unsold in the tier that did not reprice.")
 _max_ask   = _g.number_input("Max ask ($)", 0, 20_000_000, 1_250_000, 50_000,
                              help="At 80% LTC with $720K equity the project supports "
                                   "about $3.6M. Tal's worked example is $2.5M build "
@@ -1119,6 +1145,14 @@ if _gate_on:
     _keep = []
     for _i, _x in df.iterrows():
         _why = []
+        # Gates 0 and 0b run first because they are free. Only a hard hit fails a
+        # lot; soft access language raises a flag for a human and does not exclude.
+        _ik = _x.get("_intake") if isinstance(_x.get("_intake"), dict) else None
+        if _ik:
+            if _gate_access and _ik.get("access") is True:
+                _why.append(f"no legal access ({_ik.get('access_why','').lower()})")
+            if _gate_built and _ik.get("never_built") is True:
+                _why.append("never built on — no EO1/EO8 rebuild right")
         _ask = _x.get("Price")
         _lot = _x.get("lot_sqft") if "lot_sqft" in df.columns else _x.get("LOT SIZE")
         if _max_ask and pd.notna(_ask) and float(_ask) > _max_ask:
@@ -1164,6 +1198,18 @@ if _gate_on:
                    f"hillside and coastal gates could not be tested on them. They are "
                    f"UNSCREENED, not passed. Pull the Parcel Profile Report before "
                    f"spending anything on them.")
+    _soft = [(_x.get("Address", _i),
+              ", ".join((_x.get("_intake") or {}).get("access_soft", [])).lower())
+             for _i, _x in df.iterrows()
+             if (_x.get("_intake") or {}).get("access_soft")]
+    if _soft:
+        with st.expander(f"{len(_soft)} survivors use access language worth checking"):
+            st.markdown('<span class="cite">Not a failure. These remarks contain '
+                        'phrases consistent with a lot that has no built frontage. '
+                        'Confirm the lot fronts an improved dedicated street before '
+                        'spending anything.</span>', unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame(_soft, columns=["Address", "Phrases"]),
+                         hide_index=True, use_container_width=True)
     if _fails:
         with st.expander(f"{len(_fails)} lots excluded — and why"):
             st.dataframe(pd.DataFrame(_fails, columns=["Address", "Failed"]),
