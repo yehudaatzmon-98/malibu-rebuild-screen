@@ -171,32 +171,68 @@ class Assumptions:
     all three are expressible and comparable rather than being separate arithmetic.
     """
     # ---- build cost ----
-    construction_psf: float = 750.0       # Alphabet flats; hillside runs ~1,150
+    # $700 is the developer's quote on the flat Alphabet streets; hillside runs
+    # ~$1,150 for caissons, shoring and access. construction.py overrides this
+    # per street, so this value is a fallback for unrecognised addresses only.
+    # OPEN: whether the $700 is hard cost or turnkey. If it already carries A&E,
+    # permits and fees then ae_pct below is double-counted and every breakeven
+    # land figure rises by roughly $80/buildable ft. One question to Tal's
+    # contact, worth about $320k. GAP.
+    construction_psf: float = 700.0
     ae_pct: float = 0.05                  # architecture and engineering, % of hard cost
     contingency_pct: float = 0.08         # a spec build with no contingency isn't a pro forma
 
     # ---- capital structure ----
-    # High-leverage structure is the default: half the land down, construction fully
-    # financed by the lender, interest capitalised rather than paid monthly. It
-    # minimises cash in and maximises cash-on-cash, and it magnifies the downside by
-    # the same factor — both are shown wherever it is used.
-    land_ltv: float = 0.50                # lender's advance against the land
-    construction_ltc: float = 1.00        # lender's advance against build costs
-    loan_rate: float = 0.105              # construction loan rate
+    # DECIDED, Tal, 1 September 2026 call: ONE construction loan from the outset.
+    # Borrower brings 20% cash equity. The lender finances 80% INCLUDING the
+    # interest reserve, so interest is financed inside the loan rather than paid
+    # from equity. Tal called it "20% LTC, which is loan to cash" — the label is
+    # wrong, the intent is not.
+    #
+    # This makes the stack circular: the loan sizes off total capitalisation,
+    # total capitalisation includes the interest reserve, and the reserve sizes
+    # off the loan. _solve_stack() below resolves it by fixed point rather than
+    # by assuming it away. The previous model (50% land down, build fully
+    # financed) is still reachable by setting single_loan=False.
+    single_loan: bool = True
+    loan_to_cost: float = 0.80            # advance against TOTAL capitalisation
+    loan_fee_pct: float = 0.01            # origination, 1 point, drawn at close
+    loan_rate: float = 0.09               # construction loan rate
     avg_utilisation: float = 0.55         # average drawn balance across the build
     capitalise_interest: bool = True      # interest reserve inside the loan
+
+    # legacy two-facility structure, retained so older call sites still resolve
+    land_ltv: float = 0.50
+    construction_ltc: float = 1.00
 
     # ---- schedule ----
     # Two Palisades builds pulled from LADBS ran 34 and 35 months. Tal's own estimate
     # was 12-18. 18 is the base; the sensitivity is exposed rather than buried.
-    build_months: float = 18.0
+    build_months: float = 30.0
     sale_months: float = 4.0
     taxes_insurance_annual: float = 32_500.0   # the genuine out-of-pocket carry
+    # GAP: builder's risk in a post-fire ZIP is unpriced. Insurance feasibility
+    # is an open item with Tal and this line is a placeholder until it lands.
 
     # ---- exit ----
     selling_cost_pct: float = 0.05        # broker + closing
     appreciation_pct: float = 0.03        # forward escalation; observed drift ~1.5%
-    new_build_premium: float = 0.10       # measured at 19-26% size-controlled
+
+    # CORRECTED 9 Sep 2026. The 19-26% figure was confounded: new builds sit
+    # disproportionately in the Riviera, so the raw premium was picking up tier,
+    # not construction age. Re-estimated with tier controls and an out-of-footprint
+    # control group it is +9.4%, 95% CI [-1.2%, +21.3%], p = 0.085. That interval
+    # spans zero, so under rule 4 it is a range and under rule 6 it cannot carry
+    # a pro forma. Default is now zero; slide it and the range moves with it.
+    new_build_premium: float = 0.00
+
+    # THE BURN-ZONE RECOVERY BET — zero in the base case, same treatment as
+    # scarcity below. Standing homes inside the fire footprint repriced down
+    # about 17% (see market.py). Whether that reverses by a 2029 exit is a
+    # forecast. 0.0 carries the measured discount to exit; 1.0 assumes full
+    # recovery to the pre-fire relationship. This and scarcity_premium are the
+    # same bet stated twice — never switch both on without saying so.
+    burn_recovery: float = 0.00
 
     # THE SCARCITY BET — deliberately zero in the base case. The 2028-29
     # supply-constraint thesis may prove right, but Palisades pricing through
@@ -211,7 +247,7 @@ class Assumptions:
     exit_year: int = 2028              # thresholds index to Chained CPI each 1 July
     ula_index_rate: float = 0.025
 
-    version: str = "v2.0"
+    version: str = "v3.0"
 
     # ---- legacy shims, so older call sites keep working ----
     carrying_rate: float = 0.03
@@ -223,15 +259,20 @@ class Assumptions:
         return self.build_months + self.sale_months
 
     def stamp(self) -> str:
+        struct = (f"{self.loan_to_cost:.0%} LTC single loan, reserve inside"
+                  if getattr(self, "single_loan", True)
+                  else f"{self.land_ltv:.0%} land LTV / {self.construction_ltc:.0%} constr LTC")
         s = (f"{self.version} · ${self.construction_psf:,.0f}/sf · A&E {self.ae_pct:.0%} · "
-             f"cont {self.contingency_pct:.0%} · {self.land_ltv:.0%} land LTV / "
-             f"{self.construction_ltc:.0%} constr LTC @ {self.loan_rate:.1%} · "
+             f"cont {self.contingency_pct:.0%} · {struct} @ {self.loan_rate:.1%} · "
              f"{self.build_months:.0f}+{self.sale_months:.0f}mo · "
              f"sell {self.selling_cost_pct:.0%} · appr {self.appreciation_pct:.0%} · "
              f"premium {self.new_build_premium:.0%}"
              f"{' · ULA on (' + str(self.exit_year) + ' tiers)' if self.apply_ula else ' · ULA OFF'}")
         if self.scarcity_premium:
             s += f" · SCARCITY BET +{self.scarcity_premium:.0%}"
+        s += (f" · BURN-RECOVERY BET {self.burn_recovery:.0%}"
+              if getattr(self, "burn_recovery", 0)
+              else " · burn discount carried to exit")
         return s
 
 
@@ -323,7 +364,78 @@ class CompMarket:
                     note=None)
 
 
-# ------------------------------------------------------------------ the pro forma
+# ------------------------------------------------------------- the capital stack
+def solve_stack(project_costs: float, land_cost: float, a: "Assumptions") -> dict:
+    """
+    Resolve the circularity in a single construction loan whose 80% advance is
+    struck against a total capitalisation that itself includes the interest
+    reserve the loan is funding.
+
+        loan     = ltc x (project_costs + interest + fee)
+        interest = rate x average outstanding balance x term
+        equity   = (1 - ltc) x (project_costs + interest + fee)
+
+    Solved by fixed point. It converges in a handful of iterations because the
+    reserve is small relative to the base; twenty is generous.
+
+    The land advance is drawn at close and carries the whole term. The balance
+    ramps with construction draws at avg_utilisation, then sits full through the
+    marketing period.
+
+    This is the difference between the $720k equity figure in circulation and the
+    real number. $720k is 20% of land plus hard cost alone. It carries no soft
+    costs, no contingency, no interest and no carry, and interest cannot be
+    "inside the 80%" of a number that has no interest in it.
+    """
+    yrs = a.total_months / 12.0
+    build_yrs = a.build_months / 12.0
+    sale_yrs = a.sale_months / 12.0
+    ltc = getattr(a, "loan_to_cost", 0.80)
+    fee_pct = getattr(a, "loan_fee_pct", 0.0)
+
+    interest, fee = 0.0, 0.0
+    for _ in range(30):
+        total_cap = project_costs + interest + fee
+        loan = ltc * total_cap
+        fee = loan * fee_pct
+        land_advance = min(loan, ltc * land_cost)
+        ramping = max(0.0, loan - land_advance)
+        new_interest = (land_advance * a.loan_rate * yrs
+                        + ramping * a.loan_rate * build_yrs * a.avg_utilisation
+                        + ramping * a.loan_rate * sale_yrs)
+        if abs(new_interest - interest) < 1.0:
+            interest = new_interest
+            break
+        interest = new_interest
+
+    total_cap = project_costs + interest + fee
+    loan = ltc * total_cap
+    return dict(loan=loan, interest=interest, fee=fee,
+                total_cap=total_cap, equity=total_cap - loan)
+
+
+def legacy_stack(project_costs: float, land_cost: float, build_costs: float,
+                 a: "Assumptions") -> dict:
+    """The previous two-facility structure, kept so old comparisons still run."""
+    yrs = a.total_months / 12.0
+    land_loan = land_cost * a.land_ltv
+    build_loan = build_costs * a.construction_ltc
+    loan = land_loan + build_loan
+    interest = (land_loan * a.loan_rate * yrs
+                + build_loan * a.loan_rate * (a.build_months / 12.0) * a.avg_utilisation
+                + build_loan * a.loan_rate * (a.sale_months / 12.0))
+    return dict(loan=loan, interest=interest, fee=0.0,
+                total_cap=project_costs + interest,
+                equity=project_costs - loan)
+
+
+def stack(project_costs: float, land_cost: float, build_costs: float,
+          a: "Assumptions") -> dict:
+    if getattr(a, "single_loan", True):
+        return solve_stack(project_costs, land_cost, a)
+    return legacy_stack(project_costs, land_cost, build_costs, a)
+
+
 @dataclass
 class ProForma:
     buildable_sqft: float
@@ -363,19 +475,16 @@ class ProForma:
         build_costs = hard + ae + contingency
         project_costs = self.land_cost + build_costs
 
-        land_loan = self.land_cost * a.land_ltv
-        build_loan = build_costs * a.construction_ltc
-        loan_principal = land_loan + build_loan
-
-        # land is drawn day one and carries the full term; build draws ramp
-        interest = (land_loan * a.loan_rate * yrs
-                    + build_loan * a.loan_rate * (a.build_months / 12.0)
-                      * a.avg_utilisation
-                    + build_loan * a.loan_rate * (a.sale_months / 12.0))
+        _s = stack(project_costs, self.land_cost, build_costs, a)
+        loan_principal = _s["loan"]
+        interest = _s["interest"]
+        loan_fee = _s["fee"]
+        land_loan = min(loan_principal, getattr(a, "loan_to_cost", 0.80) * self.land_cost)
+        build_loan = loan_principal - land_loan
         cash_carry = a.taxes_insurance_annual * yrs
 
-        total_cost = project_costs + interest + cash_carry
-        equity = (project_costs - loan_principal) + cash_carry
+        total_cost = project_costs + interest + loan_fee + cash_carry
+        equity = _s["equity"] + cash_carry
         if not a.capitalise_interest:
             equity += interest
 
@@ -402,7 +511,8 @@ class ProForma:
             project_costs=round(project_costs),
             loan=round(loan_principal), land_loan=round(land_loan),
             build_loan=round(build_loan),
-            interest=round(interest), carry=round(cash_carry),
+            interest=round(interest), loan_fee=round(loan_fee),
+            carry=round(cash_carry),
             total_cost=round(total_cost), equity=round(equity),
             gross_sale=round(gross_sale), selling=round(selling),
             net_sale=round(net_sale),
@@ -434,12 +544,10 @@ class ProForma:
         hard = self.buildable_sqft * a.construction_psf
         build_costs = hard * (1 + a.ae_pct + a.contingency_pct)
         project_costs = self.land_cost + build_costs
-        land_loan = self.land_cost * a.land_ltv
-        build_loan = build_costs * a.construction_ltc
-        interest = (land_loan * a.loan_rate * yrs
-                    + build_loan * a.loan_rate * (a.build_months / 12.0) * a.avg_utilisation
-                    + build_loan * a.loan_rate * (a.sale_months / 12.0))
-        total_cost = project_costs + interest + a.taxes_insurance_annual * yrs
+        _s = stack(project_costs, self.land_cost, build_costs, a)
+        interest = _s["interest"]
+        total_cost = (project_costs + interest + _s["fee"]
+                      + a.taxes_insurance_annual * yrs)
 
         # solve gross_sale where gross - selling - transfer taxes = total_cost
         lo, hi = 0.0, total_cost * 4

@@ -131,23 +131,38 @@ _cap = st.sidebar.expander("Capital structure")
 _adv = st.sidebar.expander("Other assumptions")
 
 _assump_kwargs = dict(
-    construction_psf=st.sidebar.number_input("Construction $/sqft — fallback only", 400, 2000, 1000, 50,
-        help="Used only where the street is not recognised as Alphabet flats ($700) or hillside ($1,150). Most Palisades lots never touch this number; the per-lot figure is shown on each row."),
+    construction_psf=st.sidebar.number_input("Construction $/sqft — fallback only", 400, 2000, 700, 50,
+        help="Used only where the street is not recognised as Alphabet flats ($700) or hillside ($1,150). Most Palisades lots never touch this number; the per-lot figure is shown on each row. OPEN: whether the $700 quote is hard cost or turnkey. If it already includes A&E and permits, set Architecture & engineering to 0 or this is double-counted."),
     contingency_pct=_adv.slider("Contingency", 0.0, 0.20, 0.08, 0.01),
     carrying_rate=_adv.slider("Carrying rate /yr", 0.0, 0.10, 0.03, 0.005),
     selling_cost_pct=_adv.slider("Selling cost", 0.0, 0.10, 0.05, 0.005),
     appreciation_pct=_adv.slider("Appreciation /yr", -0.05, 0.10, 0.03, 0.005,
         help="Observed Palisades drift is about 1.5%/yr. 3% is already optimistic."),
-    new_build_premium=_adv.slider("New-build premium", 0.0, 0.30, 0.10, 0.01,
-        help="Measured at 19-26% size-controlled from 1,036 Palisades sales."),
-    land_ltv=_cap.slider("Lender advance on LAND", 0.0, 0.80, 0.50, 0.05,
-        help="Tal's structure is 50% down on the land, i.e. a 50% advance."),
-    construction_ltc=_cap.slider("Lender advance on BUILD costs", 0.0, 1.0, 1.00, 0.05,
-        help="Construction fully financed in the default structure."),
-    loan_rate=_cap.slider("Construction loan rate", 0.05, 0.15, 0.105, 0.005),
+    new_build_premium=_adv.slider("New-build premium", 0.0, 0.30, 0.00, 0.01,
+        help="CORRECTED 9 Sep 2026. The old 19-26% was confounded: new builds cluster in the "
+             "Riviera, so the raw premium was measuring tier, not age. Re-estimated with tier "
+             "controls and an out-of-footprint control group it is +9.4%, 95% CI -1.2% to +21.3%, "
+             "p=0.085. The interval spans zero, so it defaults to zero and is a slider, not an "
+             "assumption."),
+    loan_to_cost=_cap.slider("Loan to cost — single construction loan", 0.50, 0.85, 0.80, 0.05,
+        help="DECIDED 1 Sep 2026: one construction loan from the outset, borrower brings 20% cash, "
+             "lender finances 80% INCLUDING the interest reserve. The stack is circular (the loan "
+             "sizes off a total that contains the reserve the loan funds) and is solved by fixed "
+             "point, not assumed away. NOTE: a sponsor with no completed ground-up development as "
+             "principal typically sees 65-75%, and 80% only against recourse and a completion "
+             "guaranty. At 70% the equity cheque is roughly double what has been shown to anyone."),
+    loan_rate=_cap.slider("Construction loan rate", 0.05, 0.15, 0.09, 0.005),
+    loan_fee_pct=_cap.slider("Origination fee (points)", 0.0, 0.03, 0.01, 0.0025),
+    burn_recovery=_cap.slider("BURN-ZONE RECOVERY BET", 0.0, 1.0, 0.00, 0.05,
+        help="THE BET, and the single largest one in this model. Standing homes inside the fire "
+             "footprint repriced down about 17% (95% CI -31% to -0.3%, n=24 post-fire sales inside "
+             "the footprint). 0.00 carries that discount to exit. 1.00 assumes the burn zone returns "
+             "to its pre-fire relationship with the rest of the Westside by 2029. Defaults to zero "
+             "under rule 5. This is the same bet as the scarcity premium stated from the other side "
+             "— never switch both on without saying so."),
     build_months=st.sidebar.slider("Build months", 10, 42, 30, 1,
-        help="Two Palisades builds pulled from LADBS ran 34 and 35 months. "
-             "18 is the base case; slide it to see the cost of a longer schedule."),
+        help="Two Palisades builds pulled from LADBS ran 34 and 35 months (501 Swarthmore, "
+             "16815 Livorno). 30 is the base case; slide it to see the cost of a longer schedule."),
     ae_pct=_adv.slider("Architecture & engineering", 0.0, 0.12, 0.05, 0.01),
     apply_ula=_adv.checkbox(
         "Apply Measure ULA (mansion tax)", value=True,
