@@ -616,7 +616,10 @@ if _vrec:
 # comp source so a new upload recomputes but widget clicks don't.
 # bump the version segment whenever the fact-gathering logic changes, or lots
 # cached by an older build linger with fields the display now expects.
-_sig = f"v3-{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
+# v4 (8 Sep 2026): BHO floor-area module, zone-aware EO8 envelope, C of O vault
+# join, PRIOR_SQFT_SOURCE fix, rewritten construction bands. Facts cached under
+# v3 carry the old 0.45 flat-lot envelope and must not be reused.
+_sig = f"v4-{len(raw)}-{hash(tuple(raw[addr_col].astype(str)))}-{comps_sig}"
 if st.session_state.get("_batch_sig") != _sig:
     st.session_state["_batch_sig"] = _sig
     st.session_state["_facts"] = None
