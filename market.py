@@ -55,26 +55,93 @@ THE TWO LIMITATIONS, STATED
 from dataclasses import dataclass
 from typing import Optional
 
-MARKET_VERSION = "m1.0 · 9 Sep 2026 · DiD on 330 sales, SM/Brentwood control"
+MARKET_VERSION = "m2.0 · 10 Sep 2026 · 1,184-sale file, land trades separated"
+
+# =====================================================================
+# CORRECTION, 10 September 2026. m1.0 reported a 17% post-fire DISCOUNT.
+# That was an artifact and it is withdrawn.
+#
+# Redfin lists a burned lot under the PRE-FIRE house's square footage. A
+# Village lot trading at $3.3M against a prior 4,488 sf home computes to
+# $735/sf and reads as a cheap house. It is dirt. Checking for
+# implausibly low $/sf did not catch it, because land at Palisades
+# prices lands inside the plausible range for a house.
+#
+# 43 of the 132 post-fire Palisades sales are land trades. Removing them:
+#
+#   pre-fire  standing homes   n=770   $1,320/sf
+#   post-fire standing homes   n= 89   $1,542/sf     (+16.9%)
+#
+# Difference-in-differences on standing homes only, Santa Monica and
+# Brentwood as control, 1,184-sale file:
+#
+#   Palisades post-fire   +13.2%   95% CI [+1%, +26%]   p = 0.027
+#
+# Standing homes in the Palisades are worth MORE than before the fire,
+# not less. The direction of the m1.0 finding was wrong, not just its
+# magnitude.
+# =====================================================================
 
 FIRE_DATE = "2025-01-07"
-FIRE_STRUCTURES_DESTROYED = 6837       # CAL FIRE final count
+FIRE_STRUCTURES_DESTROYED = 6837
 FIRE_ACRES = 23448
 
-# ------------------------------------------------------------------ the estimate
-BURN_DISCOUNT_POINT = -0.171           # DiD post:burn coefficient, exponentiated
-BURN_DISCOUNT_P05 = -0.286             # bootstrap 5th percentile
-BURN_DISCOUNT_P95 = -0.038             # bootstrap 95th percentile
-BURN_DISCOUNT_P = 0.046
+# ---- exit pricing, standing homes, land trades removed
+EXIT_PSF_PRE_FIRE = 1320.0
+EXIT_PSF_POST_FIRE = 1542.0          # BASE CASE
+POST_FIRE_EFFECT = +0.132
+POST_FIRE_CI = (+0.01, +0.26)
 
-SIZE_ELASTICITY = -0.242               # d log($/sf) / d log(sf)
+# The $1,100/house-ft cut that separates land from houses is a proxy, and
+# the exit price is sensitive to it: $1,462 at a $900 cut, $1,678 at
+# $1,200. Treat $1,542 as central and $1,460-$1,680 as the range. The
+# clean fix is a burned/not-burned flag per parcel. GAP.
+EXIT_PSF_RANGE = (1462.0, 1678.0)
+
+# Corroboration from two independent directions, both ~$1,500-1,600:
+#   - Tal's realtor (The Agency), completed product today
+#   - RTI lots on market imply $1,472-$1,929/sf at a 15% margin
+#     (16150 Northfield $268/buildable ft, 865 Oreo $330,
+#      14736 McKendree $499, 611 Ocampo $597)
+RTI_IMPLIED_EXIT = (1472.0, 1929.0)
+
+# ---- SIZE. This reversed too, and it matters for what to build.
+# Pre-fire elasticity -0.243: bigger houses sold for less per foot.
+# Post-fire elasticity +0.182 (p=0.011, n=89): bigger houses sell for
+# MORE per foot. Post-fire medians by band: <3,000 $1,334;
+# 3,000-4,000 $1,362; 4,000-5,000 $1,924; 5,000-6,500 $1,957; 6,500+ $1,948.
+# Buyers with insurance proceeds are replacing large homes, and small
+# surviving stock is not what they want. Build to the envelope.
+SIZE_ELASTICITY = +0.182
+SIZE_ELASTICITY_PRE_FIRE = -0.243
+
+# ---- the land market, which did not exist before January 2025
+LAND_PSF_LOT_MEDIAN = 258.0          # $/lot ft, 43 post-fire land trades
+LAND_PSF_LOT_Q1 = 171.0
+LAND_PSF_LOT_Q3 = 333.0
+
 NEW_BUILD_PREMIUM_POINT = 0.094
 NEW_BUILD_PREMIUM_CI = (-0.012, 0.213)
-NEW_BUILD_PREMIUM_P = 0.085            # not significant at 5%; default it to zero
+NEW_BUILD_PREMIUM_P = 0.085
 
-# Longitude proxy for the burn footprint. Replace with a perimeter test.
+BURN_DISCOUNT_POINT = 0.0            # WITHDRAWN, see correction above
+BURN_DISCOUNT_P05 = 0.0
+BURN_DISCOUNT_P95 = 0.0
+BURN_DISCOUNT_P = 1.0
+
 BURN_LON_CUT = -118.535
 PALISADES_ZIP = 90272
+
+
+def land_value(lot_sqft, quartile="median"):
+    """
+    What burned Palisades dirt actually trades at, from 43 post-fire land
+    trades. This is a market check on any ask, independent of the
+    envelope calculation.
+    """
+    psf = {"q1": LAND_PSF_LOT_Q1, "median": LAND_PSF_LOT_MEDIAN,
+           "q3": LAND_PSF_LOT_Q3}[quartile]
+    return psf * float(lot_sqft or 0)
 
 
 def in_burn_zone(lat: Optional[float], lon: Optional[float],
