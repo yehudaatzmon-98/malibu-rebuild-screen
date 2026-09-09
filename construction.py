@@ -151,6 +151,43 @@ def area_construction_cost(address: Optional[str], default: float = 1000.0,
 
     s = _street(address)
 
+    # ---------------------------------------------------------------- 8 Sep 2026
+    # THE PARCEL RECORD OUTRANKS THE STREET NAME. `parcel_hillside` was accepted by
+    # this function and never read, so a street-name match decided the cost band on
+    # its own. That is wrong on every mixed street, and most of the long streets here
+    # are mixed: Livorno runs flat through Lower Marquez Knolls and then climbs the
+    # ridge, and 16860 Livorno is Hillside Area NO on ZIMAS, is described as a flat
+    # lot, and photographs as a flat pad. It was being priced at $1,150 hillside on
+    # the substring "livorno" alone, which killed a lot that should have been costed
+    # at the flats band. "sunset" would have done the same to flat Sunset Blvd
+    # addresses had it been on the list.
+    #
+    # Where ZIMAS and the street list disagree, ZIMAS wins and the answer is demoted
+    # to the flats band with the conflict stated, NOT silently resolved. Note the
+    # limit of this: Hillside Area NO is a zoning designation, not a soils finding.
+    # Every Palisades parcel checked so far also carries Special Grading Area YES.
+    # So this returns the flats band as the defensible starting point and says
+    # plainly that only a geotechnical report settles it.
+    if parcel_hillside is not None:
+        street_says_hillside = any(name in s for name in _HILLSIDE)
+        street_says_flat = any(name in s for name in _FLATS)
+        if parcel_hillside is False and street_says_hillside:
+            return dict(psf=PSF_FLATS, band="flats-by-parcel-record", confidence="parcel",
+                        why=("CONFLICT, resolved to the parcel record. The street is on the "
+                             "hillside list but ZIMAS returns Hillside Area NO for this "
+                             "parcel. These streets are mixed: they run flat at one end and "
+                             "climb at the other, so the street name is not evidence about "
+                             "this lot. Costed at the flats band. This is a zoning "
+                             "designation, not a soils finding, and only a geotechnical "
+                             "report settles the foundation."))
+        if parcel_hillside is True and street_says_flat:
+            return dict(psf=PSF_HILLSIDE, band="hillside-by-parcel-record", confidence="parcel",
+                        why=("CONFLICT, resolved to the parcel record. The street is on the "
+                             "flats list but ZIMAS returns Hillside Area YES for this parcel, "
+                             "which also governs the buildable envelope under the Baseline "
+                             "Hillside Ordinance. Costed at the hillside band. Confirm with "
+                             "geotechnical before this figure carries weight."))
+
     for name in _HILLSIDE:
         if name in s:
             return dict(psf=PSF_HILLSIDE, band="hillside", confidence="street",

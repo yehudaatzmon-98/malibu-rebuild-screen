@@ -310,15 +310,38 @@ class CompMarket:
             return self.df[self.df["_city_u"].isin(MALIBU_CITIES)]
         return self.df[self.df["_city_u"].isin(PALISADES_CITIES)]
 
+    # Radii tried in order. The first that yields at least K_MIN usable comps wins.
+    RADIUS_LADDER_MI = (0.75, 1.25, 2.0, 3.0, None)   # None = no distance limit
+    K_MIN = 4
+
     def match(self, jurisdiction: str, target_sqft: float,
               lat: Optional[float] = None, lon: Optional[float] = None,
               k: int = 6, asof_year: int = 2026) -> dict:
         """
-        Score-weighted $/sqft from the k best-matching sold comps in-jurisdiction.
+        Score-weighted $/sqft from the k best-matching sold comps, in-jurisdiction
+        AND within a distance gate.
 
-        Match score weights: SIZE first (the non-monotonic $/sqft curve makes size
-        the dominant driver), then recency, then distance. Neighborhood is nearly
-        constant in this data so it isn't used.
+        Match score weights: SIZE first, then recency, then distance.
+
+        THE DISTANCE GATE, ADDED 8 SEP 2026. The old docstring here claimed
+        "neighborhood is nearly constant in this data so it isn't used." That is
+        false, and it was the load-bearing assumption. This database spans the
+        Riviera, the Alphabet streets, Marquez Knolls, Castellammare and Brentwood,
+        which are different price tiers, and rule 2 says tiers are never blended.
+        Distance carried only 0.15 of the score through 1/(1+d), so a comp 3.4 miles
+        away scored within 0.006 of one 1.2 miles away. The matcher was indifferent
+        to tier by construction.
+
+        Measured on 16827 W Sunset Blvd: the six selected comps sat 1.2 to 3.4 miles
+        out and spanned $1,032 to $1,675/sf, while eleven sales inside half a mile
+        were not selected at all. The weighted basis it returned was defensible only
+        by coincidence.
+
+        Scoring alone cannot fix this, because a tier difference is a step and a
+        score is a slope. So the pool is GATED first: take the tightest radius on
+        the ladder that yields K_MIN comps, then score within it. The radius used is
+        returned so the caller can see when the tool had to reach outside the
+        neighbourhood, which is a fact about confidence, not a detail.
         """
         pool = self._pool(jurisdiction)
         if len(pool) == 0:
@@ -345,6 +368,27 @@ class CompMarket:
             rows.append((score, c, dist))
         if not rows:
             return dict(basis=None, n=0, comps=[], note="No usable comps (missing sizes).")
+
+        # ---- distance gate: tightest radius that still yields K_MIN comps ----
+        radius_used, gate_note = None, None
+        if lat and lon and any(d is not None for _, _, d in rows):
+            for r_mi in self.RADIUS_LADDER_MI:
+                if r_mi is None:
+                    radius_used = None
+                    gate_note = ("NO DISTANCE GATE HELD. Fewer than "
+                                 f"{self.K_MIN} in-jurisdiction comps within 3 miles, so this "
+                                 "basis blends price tiers and should be treated as a "
+                                 "placeholder, not a valuation.")
+                    break
+                inside = [r for r in rows if r[2] is not None and r[2] <= r_mi]
+                if len(inside) >= self.K_MIN:
+                    rows, radius_used = inside, r_mi
+                    if r_mi > self.RADIUS_LADDER_MI[0]:
+                        gate_note = (f"Widened to {r_mi} mi to reach {self.K_MIN} comps. "
+                                     "Beyond about a mile this crosses Palisades price "
+                                     "tiers, so read the basis as a range.")
+                    break
+
         rows.sort(key=lambda r: r[0], reverse=True)
         top = rows[:k]
         wsum = sum(s for s, _, _ in top)
@@ -361,7 +405,7 @@ class CompMarket:
         psfs = [c["price_per_square_foot"] for _, c, _ in top]
         return dict(basis=round(basis), n=len(top), comps=comps,
                     low=int(min(psfs)), high=int(max(psfs)),
-                    note=None)
+                    radius_mi=radius_used, note=gate_note)
 
 
 # ------------------------------------------------------------- the capital stack

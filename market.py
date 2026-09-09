@@ -164,8 +164,13 @@ def size_adjusted_psf(base_psf: float, base_sqft: float, target_sqft: float) -> 
     Move a $/sf figure from one house size to another along the measured
     elasticity, so a 6,200 sf comp median is not applied to a 2,700 sf build.
 
-    Elasticity is -0.242: a 10% larger house sells for about 2.4% less per foot.
-    Total price still rises with size (as sf^0.758), just sublinearly.
+    Elasticity is +0.182 (SIZE_ELASTICITY, post-fire, p=0.011): a 10% larger house
+    sells for about 1.8% MORE per foot. Total price rises as sf^1.182, superlinearly.
+
+    CORRECTED 8 Sep 2026. This docstring still described the pre-fire figure of
+    -0.243 (retained as SIZE_ELASTICITY_PRE_FIRE) after the constant itself had been
+    updated to m2.0, so the code and the prose disagreed and the prose was wrong. The
+    size-band trough was withdrawn as a composition artifact.
     """
     if not base_sqft or not target_sqft or base_sqft <= 0 or target_sqft <= 0:
         return base_psf
@@ -179,10 +184,15 @@ def marginal_revenue_psf(psf_at_size: float) -> float:
     sf^(1+e), so the marginal foot earns (1+e) times the average $/sf.
 
     Compare against loaded marginal construction cost. At $700/sf hard plus A&E
-    and contingency that is roughly $833/ft, and at Palisades pricing the two are
-    close enough that maximising the envelope is value-neutral. When they are
-    close, choose the smaller house: less capital at risk, shorter schedule,
-    wider buyer pool.
+    and contingency that is roughly $833/ft.
+
+    CORRECTED 8 Sep 2026. This previously read "when they are close, choose the
+    smaller house," which followed from the withdrawn negative elasticity. At
+    e = +0.182 the marginal foot earns 1.182x the average $/sf, not 0.758x, so the
+    instruction was inverted: BUILD TO THE ENVELOPE. The smaller-house arguments
+    (less capital at risk, shorter schedule, wider buyer pool) are real but they are
+    risk arguments, not revenue arguments, and they must be made on their own terms
+    rather than smuggled in as pricing.
     """
     return psf_at_size * (1.0 + SIZE_ELASTICITY)
 
