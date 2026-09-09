@@ -904,6 +904,13 @@ def _gather_facts(raw, addr_col, mkt):
                 f["status"] = "NO COMPS"; f["rule_note"] = m["note"]
             elif not f["Price"]:
                 f["status"] = "NEED PRICE"
+            # The distance gate reports the radius it had to reach for. Beyond about
+            # a mile it is crossing Palisades price tiers, which is a fact about
+            # confidence and belongs in front of the reader, not buried in the match
+            # result. Without this the gate is invisible at the UI layer.
+            if m.get("basis") and m.get("note"):
+                f["flags"] = (f.get("flags") or []) + [
+                    f"COMPS {m['radius_mi'] or '3+'} mi — tier may be blended"]
         elif j.code == "CITY_OF_LA":
             f["status"] = "NEED PRIOR SF"
             f["rule_note"] = ("City of LA lot with no prior sqft in county or CSV — "
