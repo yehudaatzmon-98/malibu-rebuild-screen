@@ -305,10 +305,31 @@ class CompMarket:
         self.df["_city_u"] = self.df["city"].str.upper().str.strip()
 
     def _pool(self, jurisdiction: str) -> pd.DataFrame:
-        """The comp pool for a jurisdiction. Malibu is deliberately empty here."""
+        """
+        The comp pool for a jurisdiction. Malibu is deliberately empty here.
+
+        TIGHTENED 8 Sep 2026, when the 1,184-sale file replaced the 330-row set and
+        made three latent problems visible at once:
+
+        1. NO PROPERTY-TYPE FILTER. Townhouses and condos were eligible comps for a
+           detached rebuild. 668 Palisades Dr, a Highlands townhouse on a 137,962 sqft
+           common parcel, was selected at $759/sf and pulled a subject basis down 15%.
+        2. NO SALE DATE ON 241 OF 1,184 ROWS. Those scored as though they sold three
+           years ago, which is a guess dressed as a measurement. They cluster in the
+           trophy tier (Corona del Mar, Altata, Napoli), so admitting them is not
+           neutral. They are excluded from the basis and counted in the note.
+
+        Both exclusions are stated rather than silent, because a comp set that quietly
+        drops a fifth of its rows is the same failure as one that quietly keeps them.
+        """
         if jurisdiction == "MALIBU":
-            return self.df[self.df["_city_u"].isin(MALIBU_CITIES)]
-        return self.df[self.df["_city_u"].isin(PALISADES_CITIES)]
+            pool = self.df[self.df["_city_u"].isin(MALIBU_CITIES)]
+        else:
+            pool = self.df[self.df["_city_u"].isin(PALISADES_CITIES)]
+        if "property_type" in pool.columns:
+            pool = pool[pool["property_type"].astype(str)
+                        .str.contains("Single Family", case=False, na=False)]
+        return pool[pool["sold_date"].notna()]
 
     # Radii tried in order. The first that yields at least K_MIN usable comps wins.
     RADIUS_LADDER_MI = (0.75, 1.25, 2.0, 3.0, None)   # None = no distance limit
@@ -353,7 +374,10 @@ class CompMarket:
         rows = []
         for _, c in pool.iterrows():
             csqft = c["square_feet"]
-            if not csqft or csqft <= 0:
+            # NaN passes both `not csqft` and `csqft <= 0`, so it has to be tested
+            # explicitly. The 330-row file had no missing sizes and this never fired;
+            # Tal's 1,184-row file has 42, and every one of them crashed the matcher.
+            if pd.isna(csqft) or csqft <= 0 or pd.isna(c["price_per_square_foot"]):
                 continue
             # size score: 1.0 at exact match, decaying with proportional gap
             size_gap = abs(csqft - target_sqft) / max(target_sqft, 1)
@@ -392,7 +416,19 @@ class CompMarket:
         rows.sort(key=lambda r: r[0], reverse=True)
         top = rows[:k]
         wsum = sum(s for s, _, _ in top)
-        basis = sum(s * c["price_per_square_foot"] for s, c, _ in top) / wsum
+        # WEIGHTED MEDIAN, not a weighted mean. Changed 8 Sep 2026. With k=6 a single
+        # outlier owns the mean: 16860 W Sunset Blvd, an $11.57M oceanfront sale at
+        # $3,489/sf, moved one subject's basis to $1,626 while a neighbouring lot 0.1
+        # miles away returned $1,147. A 42% spread on the same block is the matcher
+        # reporting noise. Every other central figure in this project is a median;
+        # this one was the exception and it was the fragile one.
+        _ordered = sorted(top, key=lambda r: r[1]["price_per_square_foot"])
+        _cum, basis = 0.0, _ordered[-1][1]["price_per_square_foot"]
+        for s, c, _ in _ordered:
+            _cum += s
+            if _cum >= wsum / 2:
+                basis = c["price_per_square_foot"]
+                break
         comps = [dict(
             address=c["address"], city=c["city"],
             sold=c["sold_date"].date().isoformat() if pd.notna(c["sold_date"]) else "?",
