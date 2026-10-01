@@ -88,7 +88,8 @@ def main():
         p = line.strip().split("|")
         if len(p) >= 6 and p[1]:
             land.append(dict(address=p[0], price=int(float(p[1])), lot=p[2], lat=p[3], lon=p[4], pid=p[5]))
-    lk = {key(x["address"]): x for x in land}
+    excl = {key(r["address"]): r for r in read_csv(os.path.join(D, "excluded.csv"))}
+    lk = {key(x["address"]): x for x in land if key(x["address"]) not in excl}
     changes, gone, added, skipped, need_permit = [], [], [], [], []
     keep = []
     for r in lots:

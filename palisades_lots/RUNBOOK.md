@@ -6,6 +6,10 @@ changed. Everything lives in this folder; nothing outside it is touched.
 
 ## Files
 - `data/lots.csv`, `data/order.txt`: the lot universe and row order. `data/short.txt`: the 6 shortlisted lots.
+- `data/excluded.csv`: lots Tal or Yehuda removed (e.g. 1785 Alta Mura, Tal 10/1). Never add them back, even if they relist.
+- `data/lot_features.txt`: per lot, whether the MLS view field names an ocean view and whether it is gated
+  (`address|ocean_view|gated|mls_view`). Ocean view = the MLS VIEW_DESCRIPTION contains Ocean, Coastline, Catalina,
+  White Water or Bay; it adds the Assumptions tab's ocean-view premium ($100/sf, Tal 10/1). Gated premium is $0 until Tal sets it.
 - `data/lots_changes.csv`: every price change, new listing and lot that left the market. `data/lots_offmarket.csv`.
 - `data/nbhd_base.csv`: sale $/sf per neighborhood. `judgment_psf` = Tal/Yehuda's value; `applied_psf` = what the
   model uses; `override_psf` = a manual value that always wins (only Tal/Yehuda set it).
@@ -13,7 +17,7 @@ changed. Everything lives in this folder; nothing outside it is touched.
 - `data/asking_newbuilds.csv`: new builds for sale (asking prices only, never used as comps).
 - `data/reference_points.csv`, `data/damage.csv`: neighborhood matching and cached fire-damage lookups.
 - Scripts: `redfin_land.js`, `redfin_sold.js` (run in the browser), `update_lots.py`, `update_comps.py`,
-  `build_workbook.py`, `snapshot.py`, `summary.py`, `comps_tab.py`, `lots_tab.py`.
+  `build_workbook.py`, `snapshot.py`, `summary.py`, `comps_tab.py`, `lots_tab.py`, `shortlist_md.py`.
 - `Palisades_Lot_Screen.xlsx`: the current workbook. `reports/`: one comps report per run.
 
 ## Rules (do not change without Yehuda's OK)
@@ -40,6 +44,8 @@ changed. Everything lives in this folder; nothing outside it is touched.
      Save `{"<address>": {"approved_sf": <sf or null>, "note": "<what you found, with permit number>"}}` to
      `data/incoming/permits_<date>.json`.
    - Run `update_lots.py` again without `--dry`, with `--permits data/incoming/permits_<date>.json`.
+   - For each new lot, open its Redfin page and read the MLS "View" field (VIEW_DESCRIPTION) and whether the
+     listing says gated / guard-gated; append a line to `data/lot_features.txt`. Report only what the page says.
    - For any shortlisted or watch-list lot that left the listings, open its Redfin page and record what it says
      (pending, contingent, sold, withdrawn) in `data/lots_changes.csv`.
 3. Comps. Run `redfin_sold.js` (set DAYS = 10) and save to `data/incoming/redfin_<date>.txt`, then
@@ -56,17 +62,20 @@ changed. Everything lives in this folder; nothing outside it is touched.
    `python3 snapshot.py --diff /tmp/before.json /tmp/after.json` for the report.
 6. Data room (Claude Docs, doc id 5ffcb13e-c541-499f-8117-b00be860f143). Read before every edit; people edit this
    doc, so never overwrite their words.
-   - Every run: replace the All lots tab's whole body with `python3 lots_tab.py <date>` (read its outline first and
-     replace all its blocks in one call). This tab is the live lot screen Tal and investors use instead of the
+   - Every run: replace the All lots tab's whole body with `python3 lots_tab.py <date>`: one batch that creates a new
+     prose node (parent file a78c458d-13dc, markdown from lots_tab.py) and updates file a78c458d-13dc's content to it. This tab is the live lot screen Tal and investors use instead of the
      spreadsheet, so it must always match the model.
    - If comps changed: replace the Comps tracker tab's whole body with `python3 comps_tab.py <date>`.
-   - If a shortlisted lot's numbers changed (compare sum_before/sum_after): update that lot's tab (lead sentence,
-     max offer line, "Cost and profit, medium case" table, "Three scenarios" table), the overview's Lot shortlist
-     table and Portfolio paragraph and table.
+   - If a shortlisted lot's numbers changed (compare sum_before/sum_after): run `python3 shortlist_md.py` and update
+     that lot's tab from its output (lead sentence, max offer line, house line, "Cost and profit, medium case" table,
+     "Three scenarios" table, build-cost sensitivity line); run `python3 shortlist_md.py --overview` for the overview's
+     Lot shortlist table and Portfolio paragraph and table.
+   - If any of the 10-lot plan lots (Terms tab) changed price or status, say so in the report; do not rewrite the
+     Terms tab's table yourself, flag it for Yehuda.
    - If a watch-list lot changed status or price, update its row in the overview's Watch list table.
-   - Tab body ids: overview 2f38ece2-7438, All lots 4f918c21-74e7, Comps tracker 2f757e4f-0065, 711 Chapala 75b580dd-ee3f,
+   - Tab body ids: overview 2f38ece2-7438, All lots (file a78c458d-13dc; body changes on every swap), Comps tracker 2f757e4f-0065, 711 Chapala 75b580dd-ee3f,
      611 Ocampo 930a7cbf-d54f, 16150 Northfield 41021d55-c3e3, 14410 Villa Woods d3567a36-c05f,
-     909 Rivas Canyon 1c4e93c0-85b9, 545 N Las Casas ad7e0c81-2509.
+     909 Rivas Canyon 1c4e93c0-85b9, 545 N Las Casas ad7e0c81-2509, Terms 2a119a58-686c.
 7. Commit `data/`, `reports/` and the workbook to main ("Daily refresh <date>") and push.
 8. Tell Yehuda (SendUserMessage), changes only: the diff report (price cuts with the new margin and max offer,
    lots newly clearing 15%, new listings, lots that went pending/sold), new qualifying home sales (address, price,

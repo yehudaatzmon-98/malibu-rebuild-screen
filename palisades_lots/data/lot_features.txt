@@ -1,0 +1,136 @@
+address|ocean_view|gated|mls_view
+620 N Marquette St|0|0|Canyon,Tree Top,Peek-A-Boo
+16942 Bollinger Dr|1|0|Mountains,Peek-A-Boo,Ocean
+338 Mount Holyoke|0|0|
+16821 Via La Costa|0|1|Mountains
+1111 Kagawa St|0|0|
+1433 El Bosque Ct|0|0|Mountains,Canyon
+1224 Lachman Ln|1|0|Canyon,City Lights,Ocean,Coastline
+17241 Avenida De La Herradura|0|0|Mountains
+875 Chautauqua Blvd|1|0|Trees/Woods,Ocean,Mountains,Canyon
+1167 Lachman Ln|1|0|Ocean,Mountains,Coastline,City Lights,Panoramic
+633 Resolano Dr|1|0|Ocean
+1150 Iliff St|1|0|Ocean,Mountains,City Lights
+732 Hampden Pl|0|0|Tree Top
+16895 Calle De Sarah|1|1|Ocean,Mountains
+611 Ocampo Dr|0|0|
+15215 Friends St|1|0|Bluff,Panoramic,Ocean,Coastline
+16614 Pequeno Pl|0|0|
+424 Via De La Paz|1|0|Coastline
+819 Jacon Way|0|0|
+250 Trino Way|1|0|Catalina,Coastline,City Lights,Water,Ocean
+838 N Las Casas Ave|0|0|Tree Top
+16561 Las Casas Pl|0|0|Canyon
+16740 Monte Hermoso Dr|1|0|Mountains,Ocean
+1515 Umeo Rd|0|0|Canyon,Mountains
+16726 Monte Hermoso Dr|1|0|Ocean,Mountains
+16810 Glynn Dr|1|0|Canyon,Coastline,City Lights,Catalina,Tree Top,Ocean,Mountains
+1161 Via De La Paz|0|0|
+16860 Livorno|0|0|
+16637 Cumbre Verde Ct|0|0|Mountains
+327 N Grenola St|1|0|Coastline,Canyon,City Lights
+922 Enchanted Way|1|0|Mountains,Ocean,Water
+930 Kagawa St|0|0|
+1025 Las Pulgas Rd|1|0|Ocean
+911 Hartzell St|0|0|Mountains,City Lights
+14736 Mc Kendree Ave|1|0|City,Mountains,Ocean
+16742 Bollinger Dr|0|0|Mountains
+17249 Avenida De La Herradura|0|0|Mountains
+1160 Galloway St|0|0|
+651 Erskine Dr|0|0|Peek-A-Boo,Canyon
+1026 Enchanted Way|1|1|Ocean,Coastline,Panoramic,Mountains,Canyon,City Lights
+16521 Las Casas Pl|0|0|Canyon
+866 Fiske St|0|0|Mountains
+533 Mount Holyoke Ave|1|0|Mountains,Ocean
+1011 Embury St|0|0|
+701 Via De La Paz|0|0|Mountains
+711 Muskingum Ave|0|0|Mountains
+515 N Las Casas Ave|0|0|Mountains
+545 N Las Casas Ave|0|0|
+539 Muskingum Pl|0|0|
+16723 W Sunset Blvd|0|0|
+622 Alma Real Dr|0|0|
+16814 Calle Bellevista|1|1|Mountains,Ocean
+824 Chautauqua Blvd|0|0|Canyon,Hills,Tree Top
+711 Chapala Dr|0|0|City Lights,Mountains
+16756 Monte Hermoso Dr|1|0|Ocean,Mountains,Rocks
+683 Alma Real Dr|1|0|Ocean
+16503 Las Casas Pl|0|0|Tree Top,Trees/Woods
+1425 Monte Grande|0|0|
+16150 Northfield St|0|0|
+432 Beirut Ave|1|0|Bluff,Ocean,Tree Top,Mountains
+1067 Las Pulgas Rd|1|0|Ocean
+1028 Chautauqua Blvd|0|0|Canyon
+1218 Monument|0|0|
+1226 Monument St|1|0|Mountains,Ocean
+17860 W Lecco Ln|1|0|Coastline,Ocean
+15363 Via De Las Olas|1|0|Coastline,Ocean
+627 N Marquette St|1|0|Canyon,Ocean
+736 Haverford Ave|1|0|Canyon,Mountains,Ocean
+16748 Monte Hermoso Dr|1|0|Ocean,Mountains
+676 N Las Casas|0|0|
+16918 Marquez Ave|0|0|Mountains
+17929 Castellammare Dr|0|0|
+16957 Livorno Dr|0|0|Peek-A-Boo
+620 Palmera Ave|1|0|Ocean,Tree Top
+14511 W Sunset Blvd|0|0|
+501 Muskingum Pl|0|0|Mountains
+320 Bellino Dr|1|1|Mountains,Canyon,Ocean
+558 Erskine Dr|0|0|
+16799 Charmel Ln|1|0|Canyon,City,City Lights,Ocean,Mountains,Coastline,Water,Tree Top
+16808 Charmel Ln|1|0|Ocean,Mountains,City Lights,Coastline
+722 Patterson Pl|0|1|Green Belt,Trees/Woods
+1032 El Medio Ave|1|0|Ocean,Water
+16915 Enchanted Pl|1|0|Ocean,Mountains,Tree Top
+405 N Puerto Del Mar|0|0|
+1231 Las Lomas Pl|0|0|
+1467 Via Cresta|0|1|Canyon,Mountains,Green Belt
+1078 Villa Grove Dr|1|0|Canyon,Mountains,Coastline
+17810 Castellammare Dr|1|0|Catalina,City Lights,Coastline,Ocean,Panoramic,White Water
+1626 Chastain Pkwy|1|0|Panoramic,Ocean,Mountains
+14410 Villa Woods Pl|0|0|Trees/Woods,Canyon,Mountains
+16550 Akron St|0|0|Canyon
+17639 Porto Marina Way|1|0|Ocean
+14826 W Sunset Blvd|0|0|
+611 Erskine Dr|0|0|
+1433 Via Anita|1|1|Canyon,Ocean,Coastline,Hills
+771 Ocampo Dr|0|0|
+1227 Bienveneda Ave|0|0|
+15312 Mc Kendree Ave|1|0|Bay,City Lights,Coastline,Ocean,Mountains,Marina,White Water
+429 Puerto Del Mar|1|0|Ocean,Mountains,Green Belt,Canyon,Coastline,White Water,Trees/Woods,Panoramic
+1344 Monument St|0|0|
+16827 W Sunset Blvd|0|0|
+1131 Tellem Dr|1|0|Mountains,Catalina,Coastline,Panoramic,Ocean,Water
+1314 Goucher St|1|0|Catalina,Coastline,Ocean,Pool,Water,White Water
+1073 Glenhaven Dr|1|0|Canyon,City,Panoramic,Ocean,Mountains,Catalina,City Lights,Coastline
+1324 Marinette Rd|1|0|Mountains,Ocean
+1365 Goucher St|1|0|Coastline
+14619 Bestor Blvd|1|0|Mountains,Ocean,Tree Top
+623 N Marquette St|0|0|
+860 Jacon Way|0|0|
+1475 Via Cresta|1|1|City Lights,Ocean,Mountains
+17941 Tramonto Dr|1|0|Ocean,Hills,Coastline,Mountains,Canyon
+312 Bellino Dr|1|0|City Lights,Coastline,Water,Mountains,Ocean
+17635 Porto Marina Way|1|0|Ocean
+871 Oreo Pl|1|0|Hills,Ocean
+616 Via De La Paz|1|0|Mountains,Ocean,Peek-A-Boo
+15422 Albright St|0|0|
+1228 Las Lomas Pl|1|0|Ocean,Canyon
+17053 Bollinger Dr|0|0|
+1018 Maroney Ln|0|0|Peek-A-Boo
+921 Kagawa St|0|0|
+1120 Cumbre Alta Ct|1|0|Ocean,Mountains
+15306 Mc Kendree Ave|1|0|Coastline,Ocean,Panoramic,Water
+959 Chattanooga Ave|1|0|Ocean,Mountains
+850 Jacon Way|1|0|Ocean,Tree Top
+909 Rivas Canyon Rd|0|0|
+14607 Bestor Blvd|1|0|City Lights,Canyon,Mountains,Ocean,Pool,Tree Top
+15329 De Pauw St|0|0|Canyon
+664 Las Lomas Ave|0|0|Mountains
+1355 Berea Pl|1|0|Ocean,City
+1055 Las Pulgas|0|0|
+318 Bellino Dr|0|0|
+16613 Pequeno Pl|1|0|Hills,Bay,Ocean,City Lights
+941 Bienveneda Ave|1|0|Canyon,Coastline
+16556 Chattanooga Pl|1|0|Ocean
+16021 Anoka Dr|1|0|Mountains,Ocean

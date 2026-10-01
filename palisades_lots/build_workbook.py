@@ -14,6 +14,20 @@ for b in csv.DictReader(open(os.path.join(DATA, "nbhd_base.csv"))):
     ex.append((b["code"], val, f"{b['note']}  [{how}; updated {b['updated']}]"))
 COMPS_LOG = [r for r in csv.DictReader(open(os.path.join(DATA, "comps_log.csv"))) if r["qualifies"] == "Y"]
 ASKING = list(csv.DictReader(open(os.path.join(DATA, "asking_newbuilds.csv"))))
+import re as _re
+_SUF = {"st", "dr", "ave", "av", "pl", "ln", "blvd", "rd", "way", "ct", "ter", "pkwy", "cir", "e", "w", "n", "s", "unit", "a", "b"}
+def lkey(addr):
+    t = _re.sub(r"[^a-z0-9 ]", " ", addr.lower()).split()
+    return (t[0] + "".join(w for w in t[1:] if w not in _SUF)) if t else ""
+FEAT = {}
+_fp = os.path.join(DATA, "lot_features.txt")
+if os.path.exists(_fp):
+    for r in csv.DictReader(open(_fp), delimiter="|"):
+        FEAT[lkey(r["address"])] = r
+EXCL = set()
+_xp = os.path.join(DATA, "excluded.csv")
+if os.path.exists(_xp):
+    EXCL = {lkey(r["address"]) for r in csv.DictReader(open(_xp))}
 
 F = "Arial"
 NAVY = "1F3864"
@@ -52,7 +66,7 @@ inp=[
 ("Avg % of loan drawn",0.60,pct,"Placeholder for the draw schedule."),
 ("Loan points",0.015,pct,"Placeholder."),
 ("Property tax (% of land / yr)",0.012,pct,"~1.2% of purchase price (reassessed on transfer)."),
-("Sale commission",0.05,pct,"Placeholder."),
+("Sale commission",0.035,pct,"Tal, 10/1 call: 3.5% total — Tal acts as listing broker at 1% plus 2.5% to the buyer's agent."),
 ("City + county transfer tax",0.0056,pct,"LA City 0.45% + County 0.11%."),
 ("ULA tier 1 threshold",5400000,cur,"Measure ULA, current threshold (LA City Clerk, Measure TE text)."),
 ("ULA tier 1 rate",0.04,pct,"Measure ULA."),
@@ -63,6 +77,10 @@ inp=[
 ("Build-to-zoning max sf",8000,num,"Cap to keep spec homes a sellable size."),
 ("Fast-track / approved-plans project length (yrs)",2,num,"RTI lots start right away."),
 ("Build-to-zoning project length (yrs)",3,num,"+1 year for design and plan check."),
+("Ocean-view premium ($/sf added to the neighborhood price)",100,cur,"Tal, 10/1 call: an ocean view sells for $100–200/sf more than a mountain view; low end used. Applied where the MLS view field lists ocean, coastline, Catalina, bay or white water."),
+("Gated-community premium ($/sf added)",0,cur,"Tal, 10/1 call: gated communities get 'a little premium'; no number yet, so 0 until Tal sets one."),
+("Sensitivity: lower build cost A ($/sf)",650,cur,"Tal, 10/1 call: test $650/sf."),
+("Sensitivity: lower build cost B ($/sf)",600,cur,"Tal, 10/1 call: 'we might have to go with $600'."),
 ("Target margin (profit ÷ total cost)",0.15,pct,"Typical spec-build hurdle."),
 ("WORST case: premium over today's comps",0.0,pct,"Today's closed sales, no new-build premium. Fire history (Malibu, Altadena) shows new builds selling flat or below in years 1–3."),
 ("MEDIUM case: premium over today's comps",0.10,pct,"Tal, 9/29: new construction should beat today's comps by 10–15%."),
@@ -93,7 +111,7 @@ a.freeze_panes = "A4"
 lt = wb.create_sheet("All Lots", 0)
 cols = [  # (header, group, width, fmt)
  ("Rank", "lot", 6, None), ("Address", "lot", 26, None), ("Neighborhood", "lot", 18, None), ("Asking price", "lot", 13, money0),
- ("Lot size (sf)", "lot", 10, num), ("Old house (sf)", "lot", 10, num), ("City-approved / claimed plans (sf)", "lot", 13, num), ("City-approved plans?", "lot", 9, None), ("Notes", "lot", 40, None),
+ ("Lot size (sf)", "lot", 10, num), ("Old house (sf)", "lot", 10, num), ("City-approved / claimed plans (sf)", "lot", 13, num), ("City-approved plans?", "lot", 9, None), ("Ocean view (MLS)", "lot", 8, None), ("Gated", "lot", 7, None), ("Notes", "lot", 40, None),
  ("New house size (sf)", "house", 11, num), ("How sized", "house", 17, None), ("Project length (yrs)", "house", 9, num),
  ("Sale price per sf", "house", 11, psf), ("Sale price", "house", 13, money0),
  ("Land", "cost", 13, money0), ("Construction", "cost", 13, money0), ("Design, permits & fees (or 5% reserve)", "cost", 13, money0),
@@ -101,6 +119,7 @@ cols = [  # (header, group, width, fmt)
  ("Mansion tax (ULA)", "cost", 12, money0), ("TOTAL COST", "cost", 14, money0),
  ("Profit", "ret", 13, money0), ("Margin (profit ÷ cost)", "ret", 9, '0%;(0%);"-"'), ("Most we should pay for the lot", "ret", 14, money0), ("Asking vs. most we should pay", "ret", 11, '0%'),
  ("Worst: sale $/sf", "scen", 10, psf), ("Worst: profit", "scen", 12, money0), ("Medium: sale $/sf", "scen", 10, psf), ("Medium: profit", "scen", 12, money0), ("Best: sale $/sf", "scen", 10, psf), ("Best: profit", "scen", 12, money0),
+ ("Medium profit if build cost = A", "scen", 12, money0), ("Medium profit if build cost = B", "scen", 12, money0),
  ("Nbhd code", "calc", 8, None), ("Fast-path size", "calc", 9, num), ("Build-to-zoning size", "calc", 9, num),
  ("Profit: fast path", "calc", 12, money0), ("Profit: build to zoning", "calc", 12, money0), ("Loan amount", "calc", 12, money0),
 ]
@@ -117,7 +136,7 @@ for i, (h, g, w, _) in enumerate(cols, 1):
     lt.column_dimensions[L(i)].width = w
 lt.row_dimensions[2].height = 42
 
-order = open(os.path.join(DATA, 'order.txt')).read().split("\n")
+order = [o for o in open(os.path.join(DATA, 'order.txt')).read().split("\n") if o and lkey(o) not in EXCL]
 raw = {r[0]: r for r in csv.reader(open(os.path.join(DATA, 'lots.csv'))) if r and not r[0].startswith('#')}
 n = N
 bc = n['Construction cost ($/sf, fixed)']; sc = n['Design, permits & fees — lots WITHOUT approved plans ($/sf)']; RES = n['Reserve — lots WITH city-approved plans (% of asking price)']
@@ -125,14 +144,15 @@ LTC, RATE, DRAW, PTS, PTAX = n['Construction loan (% of cost)'], n['Loan rate'],
 COMM, XF = n['Sale commission'], n['City + county transfer tax']
 T1, R1, T2, R2 = n['ULA tier 1 threshold'], n['ULA tier 1 rate'], n['ULA tier 2 threshold'], n['ULA tier 2 rate']
 M = n['Target margin (profit ÷ total cost)']
+OVP, GP = n['Ocean-view premium ($/sf added to the neighborhood price)'], n['Gated-community premium ($/sf added)']
 PW, PM, PB, SCN = n["WORST case: premium over today's comps"], n["MEDIUM case: premium over today's comps"], n["BEST case: premium over today's comps"], n['Scenario used in the cost breakdown (Worst / Medium / Best)']
 PSEL = f'IF(UPPER({SCN})="WORST",{PW},IF(UPPER({SCN})="BEST",{PB},{PM}))'
 
 def ula(sale): return f"IF({sale}>={T2},{R2},IF({sale}>={T1},{R1},0))"
 def soft(sf, ask, appr): return f"IF({appr}=\"Yes\",{RES}*({ask}),({sf})*{sc})"
-def profit_expr(sf, yrs, ask, exps, appr):
+def profit_expr(sf, yrs, ask, exps, appr, bcost=None):
     sale = f"({sf})*{exps}"
-    base = f"(({ask})+({sf})*{bc}+{soft(sf, ask, appr)})"
+    base = f"(({ask})+({sf})*{bcost or bc}+{soft(sf, ask, appr)})"
     cost = f"({base}*(1+{LTC}*({RATE}*({yrs})*{DRAW}+{PTS}))+({ask})*{PTAX}*({yrs})+{sale}*({COMM}+{XF}+{ula(sale)}))"
     return f"{sale}-{cost}"
 
@@ -143,12 +163,14 @@ for r, addr in enumerate(order, 3):
      "Rank": r - 2, "Address": addr, "Neighborhood": NB[code], "Asking price": float(ask), "Lot size (sf)": float(lotsf),
      "Old house (sf)": float(prior), "City-approved / claimed plans (sf)": float(plan) if plan else None, "City-approved plans?": "Yes" if appr == "Y" else "No",
      "Notes": flag, "Nbhd code": code,
+     "Ocean view (MLS)": "Yes" if FEAT.get(lkey(addr), {}).get("ocean_view") == "1" else "No",
+     "Gated": "Yes" if FEAT.get(lkey(addr), {}).get("gated") == "1" else "No",
     }
     for h, v in vals.items(): lt[c(h)] = v
     AP = c("City-approved plans?")
     ya = n['Fast-track / approved-plans project length (yrs)']
     yb = f"IF({c('Build-to-zoning size')}>{c('Fast-path size')},{n['Build-to-zoning project length (yrs)']},{ya})"
-    comp = f"INDEX({EXV},MATCH({c('Nbhd code')},{EXR},0))"
+    comp = f"(INDEX({EXV},MATCH({c('Nbhd code')},{EXR},0))+IF({c('Ocean view (MLS)')}=\"Yes\",{OVP},0)+IF({c('Gated')}=\"Yes\",{GP},0))"
     lt[c("Fast-path size")] = f"=IF({c('City-approved / claimed plans (sf)')}>0,{c('City-approved / claimed plans (sf)')},ROUND({c('Old house (sf)')}*{n['Fast-track size (x old house)']},0))"
     lt[c("Build-to-zoning size")] = f"=IF({AP}=\"Yes\",{c('Fast-path size')},MAX({c('Fast-path size')},MIN({n['Build-to-zoning max sf']},ROUND({c('Lot size (sf)')}*{n['Build-to-zoning size (x lot area)']},0))))"
     lt[c("Worst: sale $/sf")] = f"={comp}*(1+{PW})"
@@ -164,6 +186,8 @@ for r, addr in enumerate(order, 3):
     S_, Y_ = c('New house size (sf)'), c('Project length (yrs)')
     for sc_ in ("Worst", "Medium", "Best"):
         lt[c(f"{sc_}: profit")] = "=" + profit_expr(S_, Y_, c('Asking price'), c(f'{sc_}: sale $/sf'), AP)
+    lt[c("Medium profit if build cost = A")] = "=" + profit_expr(S_, Y_, c('Asking price'), c('Medium: sale $/sf'), AP, n['Sensitivity: lower build cost A ($/sf)'])
+    lt[c("Medium profit if build cost = B")] = "=" + profit_expr(S_, Y_, c('Asking price'), c('Medium: sale $/sf'), AP, n['Sensitivity: lower build cost B ($/sf)'])
     lt[c("Sale price")] = f"={S_}*{c('Sale price per sf')}"
     lt[c("Land")] = f"={c('Asking price')}"
     lt[c("Construction")] = f"={S_}*{bc}"
@@ -185,7 +209,7 @@ for r, addr in enumerate(order, 3):
     lt[c("Asking vs. most we should pay")] = f'=IF({c("Most we should pay for the lot")}<=0,"no price works",{c("Asking price")}/{c("Most we should pay for the lot")})'
     for i, (h, g, w, fmt) in enumerate(cols, 1):
         cell = lt.cell(row=r, column=i)
-        cell.font = blue if h in ("Asking price", "Lot size (sf)", "Old house (sf)", "City-approved / claimed plans (sf)", "City-approved plans?") else (bold if h in ("TOTAL COST", "Profit") else body)
+        cell.font = blue if h in ("Asking price", "Lot size (sf)", "Old house (sf)", "City-approved / claimed plans (sf)", "City-approved plans?", "Ocean view (MLS)", "Gated") else (bold if h in ("TOTAL COST", "Profit") else body)
         if fmt: cell.number_format = fmt
         cell.border = Border(bottom=thin)
         if h == "Notes": cell.alignment = Alignment(wrap_text=True, vertical="top")
