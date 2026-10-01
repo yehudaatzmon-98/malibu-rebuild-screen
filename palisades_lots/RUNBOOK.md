@@ -13,7 +13,7 @@ changed. Everything lives in this folder; nothing outside it is touched.
 - `data/asking_newbuilds.csv`: new builds for sale (asking prices only, never used as comps).
 - `data/reference_points.csv`, `data/damage.csv`: neighborhood matching and cached fire-damage lookups.
 - Scripts: `redfin_land.js`, `redfin_sold.js` (run in the browser), `update_lots.py`, `update_comps.py`,
-  `build_workbook.py`, `snapshot.py`, `summary.py`, `comps_tab.py`.
+  `build_workbook.py`, `snapshot.py`, `summary.py`, `comps_tab.py`, `lots_tab.py`.
 - `Palisades_Lot_Screen.xlsx`: the current workbook. `reports/`: one comps report per run.
 
 ## Rules (do not change without Yehuda's OK)
@@ -56,17 +56,20 @@ changed. Everything lives in this folder; nothing outside it is touched.
    `python3 snapshot.py --diff /tmp/before.json /tmp/after.json` for the report.
 6. Data room (Claude Docs, doc id 5ffcb13e-c541-499f-8117-b00be860f143). Read before every edit; people edit this
    doc, so never overwrite their words.
+   - Every run: replace the All lots tab's whole body with `python3 lots_tab.py <date>` (read its outline first and
+     replace all its blocks in one call). This tab is the live lot screen Tal and investors use instead of the
+     spreadsheet, so it must always match the model.
    - If comps changed: replace the Comps tracker tab's whole body with `python3 comps_tab.py <date>`.
    - If a shortlisted lot's numbers changed (compare sum_before/sum_after): update that lot's tab (lead sentence,
      max offer line, "Cost and profit, medium case" table, "Three scenarios" table), the overview's Lot shortlist
      table and Portfolio paragraph and table.
    - If a watch-list lot changed status or price, update its row in the overview's Watch list table.
-   - Tab body ids: overview 2f38ece2-7438, Comps tracker 2f757e4f-0065, 711 Chapala 75b580dd-ee3f,
+   - Tab body ids: overview 2f38ece2-7438, All lots 4f918c21-74e7, Comps tracker 2f757e4f-0065, 711 Chapala 75b580dd-ee3f,
      611 Ocampo 930a7cbf-d54f, 16150 Northfield 41021d55-c3e3, 14410 Villa Woods d3567a36-c05f,
      909 Rivas Canyon 1c4e93c0-85b9, 545 N Las Casas ad7e0c81-2509.
 7. Commit `data/`, `reports/` and the workbook to main ("Daily refresh <date>") and push.
 8. Tell Yehuda (SendUserMessage), changes only: the diff report (price cuts with the new margin and max offer,
    lots newly clearing 15%, new listings, lots that went pending/sold), new qualifying home sales (address, price,
    $/sf, neighborhood, new build or not), neighborhood values applied or flagged, and any shortlist number that
-   moved. Attach the workbook (SendUserFile) only if a shortlisted lot or a neighborhood value changed.
-   If nothing changed: one line.
+   moved, and say the data room is updated. Do NOT send the workbook: the data room is the single place Tal and
+   investors look, so nobody should have to pass spreadsheet versions around. If nothing changed: one line.
