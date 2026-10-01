@@ -10,7 +10,7 @@ cur='$#,##0;($#,##0);-'; pct='0.0%;(0.0%);-'; num='#,##0;(#,##0);-'
 ex = []
 for b in csv.DictReader(open(os.path.join(DATA, "nbhd_base.csv"))):
     val = float(b["override_psf"]) if b["override_psf"] else float(b["applied_psf"])
-    how = b["status"] + (f"; {b['rule_n']} qualifying comps, median ${int(float(b['rule_psf'])):,}" if b["rule_psf"] else "; no qualifying comps yet")
+    how = b["status"] + (f"; {b['rule_n']} qualifying comps, median ${int(float(b['rule_psf'])):,}" if b["rule_psf"] else "; no qualifying comps yet") + (f"; {b['newbuild_n']} new-build sales, median ${int(float(b['newbuild_psf'])):,}" if b.get("newbuild_psf") else "")
     ex.append((b["code"], val, f"{b['note']}  [{how}; updated {b['updated']}]"))
 COMPS_LOG = [r for r in csv.DictReader(open(os.path.join(DATA, "comps_log.csv"))) if r["qualifies"] == "Y"]
 ASKING = list(csv.DictReader(open(os.path.join(DATA, "asking_newbuilds.csv"))))

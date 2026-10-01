@@ -1,0 +1,50 @@
+{
+ "1433 El Bosque Ct": {
+  "approved_sf": null,
+  "note": "no new-house application in LADBS open data (10/1/26)"
+ },
+ "620 N Marquette St": {
+  "approved_sf": null,
+  "note": "LADBS: 2023 new-house application, not approved"
+ },
+ "16942 Bollinger Dr": {
+  "approved_sf": null,
+  "note": "no new-house application in LADBS open data (10/1/26)"
+ },
+ "338 Mount Holyoke": {
+  "approved_sf": null,
+  "note": "no new-house application in LADBS open data (10/1/26)"
+ },
+ "1111 Kagawa St": {
+  "approved_sf": null,
+  "note": "no new-house application in LADBS open data (10/1/26)"
+ },
+ "250 Trino Way": {
+  "approved_sf": null,
+  "note": "no new-house application in LADBS open data (10/1/26)"
+ },
+ "16810 Glynn Dr": {
+  "approved_sf": 4991,
+  "note": "LADBS 25010-10000-01762: plan check approved, 4,991 sf (9/30/25 status)"
+ },
+ "17860 W Lecco Ln": {
+  "approved_sf": null,
+  "note": "no county parcel match by address; permits not checked"
+ },
+ "405 N Puerto Del Mar": {
+  "approved_sf": null,
+  "note": "no new-house application in LADBS open data (10/1/26)"
+ },
+ "17639 Porto Marina Way": {
+  "approved_sf": null,
+  "note": "no county parcel match by address; permits not checked"
+ },
+ "17635 Porto Marina Way": {
+  "approved_sf": null,
+  "note": "no county parcel match by address; permits not checked"
+ },
+ "1785 Alta Mura Rd Rd": {
+  "approved_sf": null,
+  "note": "no county parcel match by address; permits not checked"
+ }
+}

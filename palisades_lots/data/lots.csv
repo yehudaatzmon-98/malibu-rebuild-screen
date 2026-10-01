@@ -1,20 +1,18 @@
-# address,submarket,ask,prior_sf,plan_sf,flags,approved
+# address,submarket,ask,prior_sf,plan_sf,lotsf,flags,approved
 711 Chapala Dr,HUNT,4375000,3383,7504,8008,"LADBS: plan check approved 7/8/26, 7,504 sf (not advertised as RTI)",Y
-701 Via de la Paz,VDLP,3500000,6622,,8304,panoramic ocean view,
+701 Via de la Paz,VDLP,3225000,6622,,8304,panoramic ocean view,
 683 Alma Real Dr,HUNT,5500000,3319,,13930,corner ocean view,
 533 Mount Holyoke Ave,VDLP,2395000,1796,,7955,,
 732 Hampden Pl,ALPHA,2195000,3395,,15123,detail blocked; price change seen 9/29,
 736 Haverford Ave,VDLP,2395000,1713,,7042,,
 432 Beirut Ave,VDLP,2150000,1672,,4004,small lot,
 15363 Via de las Olas,VDLP,5250000,1683,,6463,bluff ocean view,
-15241 Via de las Olas,VDLP,5500000,2032,,6493,bluff-front,
 15215 Friends St,VDLP,2595000,2020,3377,8528,entitlement w/ CDP,
 722 Patterson Pl,VDLP,2995000,3472,,10990,gated,
 14826 W Sunset Blvd,VDLP,1725000,1802,,6902,on Sunset,
 771 Ocampo Dr,HUNT,3950000,2988,3960,7199,"LADBS: plan check approved 2/19/26, 3,960 sf",Y
 611 Ocampo Dr,HUNT,4495000,3513,7154,8205,"LADBS: plan check approved 7/31/26, 7,154 sf (listing 7,524); new pool permit issued",Y
 622 Alma Real Dr,HUNT,3595000,4929,,8630,"Redfin $3,595,000 (9/29)",
-519 Frontera Dr,HUNT,3695000,2497,,7648,,
 616 Via de la Paz,ALPHA,2795000,3179,,6002,346 DOM,
 15329 De Pauw St,VDLP,2345000,5423,,8156,517 DOM; coastal,
 14736 McKendree Ave,ALPHA,3195000,3897,6226,7695,"LADBS: plan check approved 9/25/26, 6,226 sf (listing 6,400)",Y
@@ -25,7 +23,7 @@
 1160 Galloway St,ALPHA,2395000,1116,,6501,plans 4293 not submitted; price change seen 9/29,
 15422 Albright St,ALPHA,2750000,5328,,9327,,
 1324 Marinette Rd,ALPHA,2900000,3409,,13068,big flat view lot,
-1011 Embury St,ALPHA,1925000,1216,,5197,"LADBS: 1-story plans in review, not approved",
+1011 Embury St,ALPHA,1895000,1216,,5197,"LADBS: 1-story plans in review, not approved",
 15312 McKendree Ave,ALPHA,2350000,2269,,8135,4 cuts,
 15306 McKendree Ave,ALPHA,2500000,1235,,7017,,
 14619 Bestor Blvd,ALPHA,2795000,2828,,7802,,
@@ -35,7 +33,6 @@
 1314 Goucher St,ALPHA,4300000,5817,,18307,,
 1365 Goucher St,ALPHA,2995000,2318,,11316,,
 1355 Berea Pl,ALPHA,4500000,6785,7500,9410,approved; seller financing,
-727 Chautauqua Blvd,ALPHA,2199999,1809,,7177,arterial,
 14410 Villa Woods Pl,RIV,2795000,4219,,13724,pool remains,
 1078 Villa Grove Dr,RIV,2670000,2283,,11467,,
 909 Rivas Canyon Rd,RIV,3750000,3254,,18344,,
@@ -74,7 +71,7 @@
 16556 Chattanooga Pl,MK,2149000,1505,,8071,,
 959 Chattanooga Ave,MK,2790000,1990,7132,14461,"LADBS: 6,417 sf house + 715 sf ADU, all clearances cleared 3/2026, no approval entry",
 850 Jacon Way,MK,1750000,2359,,13307,,
-860 Jacon Way,MK,1999999,1864,,23596,,
+860 Jacon Way,MK,1750000,1864,,23596,,
 819 Jacon Way,MK,2300000,2600,3008,7744,"LADBS: plan check approved 5/14/26, 3,008 sf",Y
 16808 Charmel Ln,MK,3200000,2394,,22689,"LADBS: NOT approved (verifications in progress 7/30/26); listing claims RTI 7,000",
 16799 Charmel Ln,MK,2995000,5044,,16126,view,
@@ -101,8 +98,7 @@
 17249 Avenida de la Herradura,HIGH,899000,2644,,7349,,
 17241 Avenida de la Herradura,HIGH,899000,2255,,6535,LADBS: not approved (verifications in progress),
 1626 Chastain Pkwy E,SUMMIT,1545000,5040,,10441,price change seen 9/29,
-1588 Chastain Pkwy W,SUMMIT,1250000,3622,4184,6185,"LADBS: plan check approved 3/9/26, 4,184 sf",Y
-16821 Via La Costa,ENC,2195000,5157,,19379,,
+16821 Via La Costa,ENC,1895000,5157,,19379,,
 16814 Calle Bellevista,ENC,2095000,4435,6328,13507,"LADBS: plan check approved 7/17/26, 6,328 sf",Y
 16895 Calle De Sarah,ENC,1749000,5286,,10121,,
 1475 Via Cresta,RIDGE,4995000,8043,,63540,,
@@ -120,11 +116,22 @@
 1150 Iliff St,ALPHA,2345000,2447,,6503,NEW 9/29; survey + soils report included,
 424 Via De La Paz,VDLP,3185000,1653,,7952,"NEW 9/29; Via Bluffs, alley access",
 16614 Pequeno Pl,MK,990000,2061,,13699,NEW 9/29; AUCTION listing (price may be a starting bid); seller has slope analysis + plans,
-719 Chapala Dr,HUNT,4000000,4241,5094,8073,"LADBS: plan check complete 9/10/26, 4,748 sf house + 346 sf ADU; HOA $366/yr",Y
 16561 Las Casas Pl,MK,995000,2975,,4360,NEW 9/29; small canyon-facing lot,
 1515 Umeo Rd,RIV,5395000,4320,,33876,NEW 9/29; ~0.75 ac Riviera; seller financing offered,
 16860 Livorno Dr,MK,1600000,3085,,6599,"NEW 9/29; flat, ocean side of street",
 922 Enchanted Way,MK,1795000,2918,,15894,"NEW 9/29; cul-de-sac, mostly flat pad, ocean/mtn views",
 911 Hartzell St,ALPHA,1895000,2984,,5207,NEW 9/29,
 16957 Livorno Dr,MK,2000000,1873,,9239,NEW 9/29; flat corner lot,
-1028 Chautauqua Blvd,ALPHA,3535000,3602,,11832,Back on market subject to cancellation of current escrow,
+1028 Chautauqua Blvd,ALPHA,3250000,3602,,11832,Back on market subject to cancellation of current escrow,
+1433 El Bosque Ct,ENC,1299000,3672,,15462,new listing 2026-10-01; no new-house application in LADBS open data (10/1/26),
+620 N Marquette St,BLUFF,5295000,0,,64396,"new listing 2026-10-01; prior home size unknown; LADBS: 2023 new-house application, not approved",
+16942 Bollinger Dr,MK,1475000,1770,,6902,new listing 2026-10-01; no new-house application in LADBS open data (10/1/26),
+338 Mount Holyoke,VDLP,2695000,3151,,6925,new listing 2026-10-01; no new-house application in LADBS open data (10/1/26),
+1111 Kagawa St,ALPHA,2350000,2022,,6501,new listing 2026-10-01; no new-house application in LADBS open data (10/1/26),
+250 Trino Way,BLUFF,8288000,3085,,12581,new listing 2026-10-01; no new-house application in LADBS open data (10/1/26),
+16810 Glynn Dr,HIGH,2495000,3850,4991,13538,"new listing 2026-10-01; LADBS 25010-10000-01762: plan check approved, 4,991 sf (9/30/25 status)",Y
+17860 W Lecco Ln,CAST,999000,0,,3717,new listing 2026-10-01; prior home size unknown; no county parcel match by address; permits not checked,
+405 N Puerto Del Mar,BLUFF,10995000,2637,,26571,new listing 2026-10-01; no new-house application in LADBS open data (10/1/26),
+17639 Porto Marina Way,CAST,995000,0,,4486,new listing 2026-10-01; prior home size unknown; no county parcel match by address; permits not checked,
+17635 Porto Marina Way,CAST,995000,0,,4042,new listing 2026-10-01; prior home size unknown; no county parcel match by address; permits not checked,
+1785 Alta Mura Rd,RIV,999000,0,,32542,new listing 2026-10-01; prior home size unknown; Redfin: two adjacent never-built hillside parcels (APN 4425003046 + 4425003045) at the top of the Riviera; listed since 2025; size is a pure zoning guess,

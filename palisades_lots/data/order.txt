@@ -14,7 +14,6 @@
 16614 Pequeno Pl
 16503 Las Casas Pl
 16550 Akron St
-719 Chapala Dr
 871 Oreo Pl
 1515 Umeo Rd
 16561 Las Casas Pl
@@ -45,7 +44,6 @@
 15422 Albright St
 558 Erskine Dr
 911 Hartzell St
-519 Frontera Dr
 850 Jacon Way
 14607 Bestor Blvd
 1025 Las Pulgas Rd
@@ -88,7 +86,6 @@
 1073 Glenhaven Dr
 1150 Iliff St
 424 Via De La Paz
-727 Chautauqua Blvd
 14619 Bestor Blvd
 1475 Via Cresta
 16556 Chattanooga Pl
@@ -113,8 +110,6 @@
 17941 Tramonto Dr
 15363 Via de las Olas
 633 Resolano Dr
-15241 Via de las Olas
-1588 Chastain Pkwy W
 16895 Calle De Sarah
 16821 Via La Costa
 1120 Cumbre Alta Ct
@@ -127,3 +122,15 @@
 17249 Avenida de la Herradura
 17241 Avenida de la Herradura
 1626 Chastain Pkwy E
+1433 El Bosque Ct
+620 N Marquette St
+16942 Bollinger Dr
+338 Mount Holyoke
+1111 Kagawa St
+250 Trino Way
+16810 Glynn Dr
+17860 W Lecco Ln
+405 N Puerto Del Mar
+17639 Porto Marina Way
+17635 Porto Marina Way
+1785 Alta Mura Rd

@@ -15,15 +15,15 @@ out = [f"# Comps tracker", "",
        f"Updated {asof}. The model's sale price per sf for each neighborhood comes from closed sales of houses built 2010 or later. "
        f"{len(log)} sales qualify today. New sales are added every week and the model and lot pages are updated to match.", "",
        "## Sale price per sf used in the model (worst case)", "",
-       "| Neighborhood | $/sf used | Where it comes from | Qualifying sales | Their median |", "| --- | --- | --- | --- | --- |"]
+       "| Neighborhood | $/sf used | Where it comes from | New-build sales (2025+) | Their median | All qualifying sales | Their median |", "| --- | --- | --- | --- | --- | --- | --- |"]
 for b in base:
     used = b["override_psf"] or b["applied_psf"]
-    src = "Override" if b["override_psf"] else ("Median of closed sales" if b["status"].startswith("rule") else "Judgment (too few sales, or sales disagree)")
-    out.append(f"| {NB.get(b['code'], b['code'])} | {m(used)} | {src} | {b['rule_n'] or 0} | {m(b['rule_psf']) if b['rule_psf'] else '-'} |")
-flags = [b for b in base if not b["override_psf"] and int(b["rule_n"] or 0) >= 3 and not b["status"].startswith("rule")]
+    src = "Override" if b["override_psf"] else ("Median of new-build sales" if "new-build" in b["status"] else ("Median of closed sales" if b["status"].startswith("rule") else "Judgment (too few sales, or sales disagree)"))
+    out.append(f"| {NB.get(b['code'], b['code'])} | {m(used)} | {src} | {b.get('newbuild_n') or 0} | {m(b['newbuild_psf']) if b.get('newbuild_psf') else '-'} | {b['rule_n'] or 0} | {m(b['rule_psf']) if b['rule_psf'] else '-'} |")
+flags = [b for b in base if not b["override_psf"] and b["status"] == "judgment" and (int(b["rule_n"] or 0) >= 3 or int(b.get("newbuild_n") or 0) >= 2)]
 if flags:
     out += ["", "**Needs a decision:** " + "; ".join(
-        f"{NB[b['code']]} closed sales point to {m(b['rule_psf'])}/sf vs {m(b['judgment_psf'])} in the model" for b in flags) +
+        f"{NB[b['code']]} closed sales point to {m(b['newbuild_psf'] if int(b.get('newbuild_n') or 0) >= 2 else b['rule_psf'])}/sf vs {m(b['judgment_psf'])} in the model" for b in flags) +
         ". The model keeps the current value until Tal sets an override."]
 out += ["", "## Qualifying closed sales", "", "| Sold | Address | Neighborhood (auto-matched) | Price | Sf | $/sf | Built |", "| --- | --- | --- | --- | --- | --- | --- |"]
 for r in log:
@@ -34,6 +34,7 @@ for r in ask:
     out.append(f"| {r['address']} | {r['neighborhood']} | {m(r['asking'])} | {int(float(r['sqft'])):,} | {m(float(r['asking']) / float(r['sqft']))} | {r['status']} |")
 out += ["", "How it works:",
         "- A sale counts when it is a house in 90272 closed in the last 24 months, 2,000+ sf, built 2010 or later, and not a burned house sold as a lot (LA County damage data).",
+        "- New builds (built 2025 or later, including homes sold during construction once they close) count most: with 2 or more in a neighborhood, their median sets the value instead of older homes.",
         "- Each sale is matched to the neighborhood of the nearest lots on our list, so a sale near a border can land in the wrong one. A neighborhood's value moves to the median of its sales only with 3+ sales and a move of 15% or less. Bigger moves wait for a decision.",
         "- Sources: Tal's MLS export (through 7/24/2026), Redfin sold data weekly, [LA County fire-damage data](https://data.lacounty.gov/datasets/parcels-2025-fires-debris-removal-public-view)."]
 print("\n".join(out))

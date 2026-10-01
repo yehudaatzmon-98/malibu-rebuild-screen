@@ -14,7 +14,9 @@ Rules (also in RUNBOOK.md):
   sold as a lot (county damage "Destroyed" and built before 2025).
   Neighborhood = majority code of the 5 nearest reference points within 900 m.
   RULE $/sf for a neighborhood = median $/sf of its qualifying comps, rounded to $10.
-  The rule is APPLIED only when it has 3+ comps AND moves the value by 15% or less.
+  NEW-BUILD sales (built 2025 or later, including homes sold while still under construction once they
+  close) are the best evidence: with 2+ in a neighborhood, their median is the rule instead.
+  The rule is APPLIED only when it has enough comps (3 resales or 2 new builds) AND moves the value by 15% or less.
   Otherwise the current value stays and the report flags it for review. A number in
   override_psf always wins.
 """
@@ -31,6 +33,7 @@ DMG = os.path.join(D, "damage.csv")
 FIELDS = ["sold_date", "address", "price", "sqft", "psf", "year_built", "lot_sf", "lat", "lon", "source", "mls", "url",
           "damage", "nbhd", "nearest_ref_m", "qualifies", "reason", "added_on"]
 MIN_SF, MIN_YEAR, WINDOW_DAYS, MIN_N, MAX_MOVE = 2000, 2010, 730, 3, 0.15
+NEW_YEAR, MIN_N_NEW = 2025, 2  # new-build closings: built 2025 or later
 
 
 def norm(a):
@@ -138,23 +141,35 @@ def main():
     base = read_csv(BASE)
     changes, flags = [], []
     for b in base:
-        q = [float(r["psf"]) for r in log if r["qualifies"] == "Y" and r["nbhd"] == b["code"] and r["psf"]]
+        qual = [r for r in log if r["qualifies"] == "Y" and r["nbhd"] == b["code"] and r["psf"]]
+        q = [float(r["psf"]) for r in qual]
+        qn = [float(r["psf"]) for r in qual if int(float(r["year_built"])) >= NEW_YEAR]
         old = float(b["applied_psf"])
         b["rule_n"] = str(len(q))
         b["rule_psf"] = str(int(round(statistics.median(q), -1))) if q else ""
+        b["newbuild_n"] = str(len(qn))
+        b["newbuild_psf"] = str(int(round(statistics.median(qn), -1))) if qn else ""
+        # New-build closings (built 2025+) are the best evidence for what our houses will sell for:
+        # with 2+ of them, they set the rule; otherwise the 2010+ resales do (3+ needed).
+        if len(qn) >= MIN_N_NEW:
+            cand, basis = float(b["newbuild_psf"]), f"rule: {len(qn)} new-build sales"
+        elif len(q) >= MIN_N:
+            cand, basis = float(b["rule_psf"]), f"rule: {len(q)} sales of 2010+ homes"
+        else:
+            cand, basis = None, ""
         if b["override_psf"]:
             new, status = float(b["override_psf"]), "override"
-        elif len(q) >= MIN_N and abs(float(b["rule_psf"]) / float(b["judgment_psf"]) - 1) <= MAX_MOVE:
-            new, status = float(b["rule_psf"]), f"rule ({len(q)} comps)"
+        elif cand is not None and abs(cand / float(b["judgment_psf"]) - 1) <= MAX_MOVE:
+            new, status = cand, basis
         else:
             new, status = float(b["judgment_psf"]), "judgment"
-            if len(q) >= MIN_N:
-                flags.append(f"{b['code']}: {len(q)} comps give ${int(float(b['rule_psf'])):,}/sf vs ${int(float(b['judgment_psf'])):,} judgment (more than 15% apart, not applied; review and set override_psf if right)")
+            if cand is not None:
+                flags.append(f"{b['code']}: {basis.replace('rule: ', '')} give ${int(cand):,}/sf vs ${int(float(b['judgment_psf'])):,} judgment (more than 15% apart, not applied; review and set override_psf if right)")
         if new != old:
             changes.append(f"{b['code']}: ${int(old):,} -> ${int(new):,}/sf ({status})")
             b["updated"] = a.asof
         b["applied_psf"], b["status"] = str(int(new)), status
-    write_csv(BASE, base, ["code", "judgment_psf", "applied_psf", "override_psf", "rule_psf", "rule_n", "status", "note", "updated"])
+    write_csv(BASE, base, ["code", "judgment_psf", "applied_psf", "override_psf", "rule_psf", "rule_n", "newbuild_psf", "newbuild_n", "status", "note", "updated"])
 
     os.makedirs(os.path.join(HERE, "reports"), exist_ok=True)
     rep = [f"# Comps update {a.asof}", ""]
@@ -164,8 +179,8 @@ def main():
     rep += ["", "## Neighborhood $/sf changes applied", ""] + ([f"- {c}" for c in changes] or ["- none"])
     rep += ["", "## Flagged for review", ""] + ([f"- {f}" for f in flags] or ["- none"])
     rep += ["", "## Damage lookups still needed", ""] + ([f"- {x}" for x in need_dmg] or ["- none"])
-    rep += ["", "## Current neighborhood values", "", "| Code | Applied $/sf | Status | Qualifying comps | Rule median |", "| --- | --- | --- | --- | --- |"]
-    rep += [f"| {b['code']} | ${int(float(b['applied_psf'])):,} | {b['status']} | {b['rule_n']} | {('$' + format(int(float(b['rule_psf'])), ',')) if b['rule_psf'] else '-'} |" for b in base]
+    rep += ["", "## Current neighborhood values", "", "| Code | Applied $/sf | Status | Qualifying comps | Median | New-build sales | New-build median |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    rep += [f"| {b['code']} | ${int(float(b['applied_psf'])):,} | {b['status']} | {b['rule_n']} | {('$' + format(int(float(b['rule_psf'])), ',')) if b['rule_psf'] else '-'} | {b['newbuild_n']} | {('$' + format(int(float(b['newbuild_psf'])), ',')) if b['newbuild_psf'] else '-'} |" for b in base]
     out = os.path.join(HERE, "reports", f"comps_{a.asof}.md")
     open(out, "w").write("\n".join(rep) + "\n")
     print("\n".join(rep))
