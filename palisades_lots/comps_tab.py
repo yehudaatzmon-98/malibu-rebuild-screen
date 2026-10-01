@@ -13,7 +13,7 @@ m = lambda v: f"${int(round(float(v))):,}"
 
 out = [f"# Comps tracker", "",
        f"Updated {asof}. The model's sale price per sf for each neighborhood comes from closed sales of houses built 2010 or later. "
-       f"{len(log)} sales qualify today. New sales are added every week and the model and lot pages are updated to match.", "",
+       f"{len(log)} sales qualify today. New sales are added every day and the model and lot pages are updated to match.", "",
        "## Sale price per sf used in the model (worst case)", "",
        "| Neighborhood | $/sf used | Where it comes from | New-build sales (2025+) | Their median | All qualifying sales | Their median |", "| --- | --- | --- | --- | --- | --- | --- |"]
 for b in base:
@@ -36,5 +36,5 @@ out += ["", "How it works:",
         "- A sale counts when it is a house in 90272 closed in the last 24 months, 2,000+ sf, built 2010 or later, and not a burned house sold as a lot (LA County damage data).",
         "- New builds (built 2025 or later, including homes sold during construction once they close) count most: with 2 or more in a neighborhood, their median sets the value instead of older homes.",
         "- Each sale is matched to the neighborhood of the nearest lots on our list, so a sale near a border can land in the wrong one. A neighborhood's value moves to the median of its sales only with 3+ sales and a move of 15% or less. Bigger moves wait for a decision.",
-        "- Sources: Tal's MLS export (through 7/24/2026), Redfin sold data weekly, [LA County fire-damage data](https://data.lacounty.gov/datasets/parcels-2025-fires-debris-removal-public-view)."]
+        "- Sources: Tal's MLS export (through 7/24/2026), Redfin sold data daily, [LA County fire-damage data](https://data.lacounty.gov/datasets/parcels-2025-fires-debris-removal-public-view)."]
 print("\n".join(out))
