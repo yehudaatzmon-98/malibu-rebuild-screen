@@ -134,3 +134,4 @@ address|ocean_view|gated|mls_view
 941 Bienveneda Ave|1|0|Canyon,Coastline
 16556 Chattanooga Pl|1|0|Ocean
 16021 Anoka Dr|1|0|Mountains,Ocean
+1339 Chautauqua Blvd|0|0|
