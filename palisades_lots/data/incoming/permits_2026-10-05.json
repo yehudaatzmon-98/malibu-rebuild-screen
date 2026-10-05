@@ -1,0 +1,9 @@
+{
+ "16640 Linda Ter": {"approved_sf": null, "note": "no new-house application in LADBS open data (APN 4419014016, 10/5/26)"},
+ "16778 Edgar St": {"approved_sf": 3455, "note": "LADBS 25010-30000-02133: PERMIT ISSUED 6/3/26, 3,455 sf (open-data square_footage 3,454.6)"},
+ "717 Via De La Paz": {"approved_sf": 3579, "note": "LADBS 25010-10000-06355: plan check approved 3/13/26, 3,579 sf (open-data square_footage; permit report shows no size); 456 sf ADU 25010-10000-06357 also approved"},
+ "906 Kagawa St": {"approved_sf": null, "note": "no new-house application in LADBS open data (APN 4423023002, 10/5/26)"},
+ "1115 Via De La Paz": {"approved_sf": null, "note": "LADBS 25010-30000-01756: new-house application, verifications in progress 9/25/26, not approved"},
+ "16661 Cumbre Verde Ct": {"approved_sf": null, "note": "no new-house application in LADBS open data (APN 4431033021, 10/5/26)"},
+ "15241 Via De Las Olas": {"approved_sf": null, "note": "no new-house application in LADBS open data (APN 4412025006, 10/5/26)"}
+}

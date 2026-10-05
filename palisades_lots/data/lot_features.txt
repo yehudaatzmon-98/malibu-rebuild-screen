@@ -135,3 +135,10 @@ address|ocean_view|gated|mls_view
 16556 Chattanooga Pl|1|0|Ocean
 16021 Anoka Dr|1|0|Mountains,Ocean
 1339 Chautauqua Blvd|0|0|
+16640 Linda Ter|1|0|Coastline,City Lights,Pool,Panoramic,Ocean,Mountains
+16778 Edgar St|0|0|
+717 Via De La Paz|1|0|Canyon,Ocean
+906 Kagawa St|0|0|Mountains
+1115 Via De La Paz|0|0|Peek-A-Boo
+16661 Cumbre Verde Ct|1|0|Ocean
+15241 Via de las Olas|1|0|Ocean,Coastline,City Lights,Water,Bluff
