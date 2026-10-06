@@ -72,7 +72,6 @@
 736 Haverford Ave
 320 Bellino Dr
 16021 Anoka Dr
-1228 Las Lomas Pl
 1131 Tellem Dr
 16808 Charmel Ln
 930 Kagawa St
@@ -141,3 +140,6 @@
 1115 Via De La Paz
 16661 Cumbre Verde Ct
 15241 Via de las Olas
+1022 Lachman Ln
+1405 El Bosque Ct
+1005 Villa Grove Dr

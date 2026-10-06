@@ -142,3 +142,6 @@ address|ocean_view|gated|mls_view
 1115 Via De La Paz|0|0|Peek-A-Boo
 16661 Cumbre Verde Ct|1|0|Ocean
 15241 Via de las Olas|1|0|Ocean,Coastline,City Lights,Water,Bluff
+1022 Lachman Ln|1|0|City Lights,City,Pool,Ocean,Mountains,Hills
+1405 El Bosque Ct|1|0|Mountains,Ocean,Panoramic,Canyon
+1005 Villa Grove Dr|1|0|Canyon,Ocean
