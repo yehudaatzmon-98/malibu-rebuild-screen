@@ -56,9 +56,9 @@ rm.column_dimensions["A"].width = 120
 ip = wb.create_sheet("Inputs")
 ip["A1"] = "Inputs (blue = change me; every number in the workbook updates)"; ip["A1"].font = F(bold=True, size=12)
 hdr(ip, 3, ["Input", "Value", "Note"])
-rows = [("Construction cost ($/sf)", COSTS[0], USD, "Builder's quote; not yet fixed in writing"),
-        ("Lower build cost scenario 1 ($/sf)", COSTS[1], USD, "Tal's estimate"),
-        ("Lower build cost scenario 2 ($/sf)", COSTS[2], USD, "Reported locally (secondhand, not verified)"),
+rows = [("Construction cost ($/sf)", COSTS[0], USD, "Builder's quote; not yet fixed in writing; a second bid is being sought"),
+        ("Lower build cost scenario 1 ($/sf)", COSTS[1], USD, "Our estimate"),
+        ("Lower build cost scenario 2 ($/sf)", COSTS[2], USD, "Local wood-frame price, shown for reference (secondhand, not verified); we build in steel"),
         ("Design, permits and fees ($/sf, no approved plans)", A["Design, permits & fees — lots WITHOUT approved plans ($/sf)"], USD, "Placeholder until architect quotes"),
         ("Reserve when plans are approved (% of lot price)", A["Reserve — lots WITH city-approved plans (% of asking price)"], PCT1, "Replaces design costs"),
         ("Construction loan (% of cost)", A["Construction loan (% of cost)"], PCT1, "To confirm with a lender"),

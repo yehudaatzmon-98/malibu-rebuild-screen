@@ -26,9 +26,9 @@ if tab == "readme":
            [""], ["Still to confirm: the builder's $700/sf as a fixed price in writing; loan terms; house sizes on lots without plans (architect); closed sales against title; that approved plans transfer with each sale."],
            ["Sources: listings from Redfin; closed sales from an MLS export plus Redfin and Compass records; LA County Assessor; LADBS permit records. Listing claims are the sellers' words unless marked as checked with the city."]]
 elif tab == "inputs":
-    rows = [("Construction cost ($/sf)", COSTS[0], "Builder's quote; not yet fixed in writing"),
-            ("Lower build cost scenario 1 ($/sf)", COSTS[1], "Tal's estimate"),
-            ("Lower build cost scenario 2 ($/sf)", COSTS[2], "Reported locally (secondhand, not verified)"),
+    rows = [("Construction cost ($/sf)", COSTS[0], "Builder's quote; not yet fixed in writing; a second bid is being sought"),
+            ("Lower build cost scenario 1 ($/sf)", COSTS[1], "Our estimate"),
+            ("Lower build cost scenario 2 ($/sf)", COSTS[2], "Local wood-frame price, shown for reference (secondhand, not verified); we build in steel"),
             ("Design, permits and fees ($/sf, no approved plans)", A["Design, permits & fees — lots WITHOUT approved plans ($/sf)"], "Placeholder until architect quotes"),
             ("Reserve when plans are approved (% of lot price)", A["Reserve — lots WITH city-approved plans (% of asking price)"], "Replaces design costs"),
             ("Construction loan (% of cost)", A["Construction loan (% of cost)"], "To confirm with a lender"),
