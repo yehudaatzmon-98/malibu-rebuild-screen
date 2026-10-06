@@ -18,7 +18,7 @@ changed. Everything lives in this folder; nothing outside it is touched.
 - `data/reference_points.csv`, `data/damage.csv`: neighborhood matching and cached fire-damage lookups.
 - Scripts: `redfin_land.js`, `redfin_sold.js` (run in the browser), `update_lots.py`, `update_comps.py`,
   `build_workbook.py`, `snapshot.py`, `summary.py`, `comps_tab.py`, `lots_tab.py`, `shortlist_md.py`, `model_tab.py`,
-  `deal.py` (shared deal math: both financing models), `investor_tab.py` (investor data room tabs).
+  `deal.py` (shared deal math: both financing models), `gsheet_payload.py` (data for the Drive investor sheet), `investor_tab.py` (old Claude investor room tabs, retired).
 - `data/investor_notes.csv`: the plain-English fact line for each plan lot in the investor data room (verified facts only).
 - `data/plan10.txt`: the lots in the 10-lot plan. Only Tal or Yehuda change it.
 - `Palisades_Lot_Screen.xlsx`: the current workbook. `reports/`: one comps report per run.
@@ -74,13 +74,23 @@ changed. Everything lives in this folder; nothing outside it is touched.
      large; if one create call is too big, create the node with everything up to "## Full cost build-up", point the
      file at it, then insert the rest at the end of that node. If `model_tab.py plan` reports a plan lot no longer
      listed, or a plan lot drops below 15%, say so in the report. Never edit data/plan10.txt yourself.
-   - Investor data room (separate doc, id 60b636ad-64f1-4049-96b4-0f90844bc9e9; investors and contractors see it, so
-     no deal terms, no max offers, no internal notes). Every run, same swap method (new node, point the file at it):
-     "The ten lots" (file f8ba68cf-eb69) from `python3 investor_tab.py lots <date>`, "Project numbers" (file
-     701685a4-3add) from `investor_tab.py numbers`, "Market evidence" (file 4a3e7397-a31b) from `investor_tab.py market`,
-     "Assumptions and method" (file 3c12eab4-27e9) from `investor_tab.py inputs`. The "Start here" tab (file
-     7a245a8f-c9d1) is hand-written: never regenerate it. If a plan lot gets a new verified fact (permit, status), update
-     its line in data/investor_notes.csv.
+   - Investor data room = Google Drive folder "Rebuilding the Palisades — Investor Data Room"
+     (id 1s5VApWGWrJcCG92WcbzpzLuGAg2ystnW). Investors and contractors see it: no deal terms, no max offers, no internal
+     notes. Update the Google Sheet "02 Lots and numbers" (spreadsheetId 1Qttu48XSGOFoKuAtdgTdfpEAikSubmAsaBdiluAgsWM)
+     in place with the Google Sheets connector, every run. Only data cells change; every other tab is live formulas
+     and recalculates on its own, so never rewrite Summary, Lot breakdown or Calc.
+       a. Lots!A1:J13 with update_formulas from `python3 gsheet_payload.py lots <date>`.
+       b. Inputs!A26:D28 with the last three rows of `python3 gsheet_payload.py inputs <date>` (neighborhood prices).
+          Do not touch Inputs!B4:B22 unless a model input in deal.py changed.
+       c. Market evidence: batch_clear_values on 'Market evidence'!A1:G80, then update_formulas from A1 with
+          `python3 gsheet_payload.py market <date>`.
+       d. 'Read me'!A2 with the second row of `python3 gsheet_payload.py readme <date>` (the updated date).
+       e. Verify with get_values on Summary!A15:J15 and Summary!B33:E33: the ten-lot profit and cash must equal
+          `python3 -c "import deal; deal.selfcheck()"` / deal.portfolio for financing A, and no cell shows #REF/#N/A.
+     If the plan list (data/plan10.txt) changes, the sheet's Lots rows must change too: tell Yehuda instead of
+     restructuring the sheet. "00 Start here" (Google Doc 1G-ZeRUl7Npq7eGOnbTCx9VcIdhTXxYVB7DjM5Svf-v4) is
+     hand-written: never regenerate it. If a plan lot gets a new verified fact (permit, status), update its line in
+     data/investor_notes.csv. The Drive connector cannot edit file contents; use the Sheets connector only.
    - The investor deck (https://claude.ai/artifact/Kzvd7kcB5m9rmTZjb2tPeJ) is a 10/6 snapshot and is NOT edited by this
      run. If the ten-lot medium profit moves more than 5% from $17.3M, or a plan lot goes pending/sold, tell Yehuda the
      deck's numbers need a refresh.
