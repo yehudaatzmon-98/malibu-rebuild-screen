@@ -39,7 +39,7 @@ head = lambda title, blurb: [f"# {title}", "", f"Updated {asof}. {blurb}", ""]
 
 if mode == "lots":
     L = head("The ten lots", "Rebuilt every morning from the current listings and closed sales, so price cuts and new sales show up here automatically. "
-             f"Construction at ${COSTS[0]:,.0f}/sf. Worst case = homes sell at today's prices; medium = 10% more for a brand-new home; best = 20% more.")
+             f"Construction at ${COSTS[0]:,.0f}/sf. Worst case = no premium for a new home over the price each neighborhood uses (Market evidence tab); medium = 10% more; best = 20% more.")
     if GONE:
         L += [f"**Note:** no longer in the active listings: {', '.join(GONE)}. Totals cover the remaining {len(SEL)} lots.", ""]
     L += ["## At a glance", "",
@@ -100,6 +100,20 @@ elif mode == "numbers":
     for cost in COSTS:
         a_ = [portfolio(SEL, c, cost, "loan") for c in ("Worst", "Medium")]; b_ = [portfolio(SEL, c, cost, "cash") for c in ("Worst", "Medium")]
         L.append(f"| ${cost:,.0f}/sf | {M1(a_[1]['cash_in'])} | {M1(a_[1]['profit'])} ({M1(a_[0]['profit'])}), {P(a_[1]['margin'])} | {M1(b_[1]['cash_in'])} | {M1(b_[1]['profit'])} ({M1(b_[0]['profit'])}), {P(b_[1]['margin'])} |")
+    # stress: neighborhoods priced at the median of their qualifying closed sales instead of the model's value
+    nb = {r_["code"]: r_ for r_ in csv.DictReader(open(os.path.join(D, "nbhd_base.csv")))}
+    code = {"Riviera": "RIV", "Huntington": "HUNT", "Bluffs / El Medio": "BLUFF"}
+    sw = sm = 0; losers = []
+    for a in SEL:
+        g = dict(LOTS[a]); n_ = nb[code[g["Neighborhood"]]]
+        base = (float(n_["rule_psf"]) if n_["rule_n"] not in ("", "0") else float(n_["applied_psf"])) + (A["Ocean-view premium ($/sf added to the neighborhood price)"] if g.get("Ocean view (MLS)") == "Yes" else 0)
+        g["Worst: sale $/sf"] = base; g["Medium: sale $/sf"] = base * (1 + A["MEDIUM case: premium over today's comps"])
+        w_ = calc(g, "Worst")["profit"]; sw += w_; sm += calc(g, "Medium")["profit"]
+        if w_ < 0: losers.append(a)
+    L += ["", "## Below our prices", "",
+          "Recent closed sales of newer homes are below the prices the model uses in the Bluffs and Huntington (Market evidence tab). "
+          f"If every neighborhood were priced at the median of its qualifying closed sales instead, ten-lot profit with financing A would be {M1(sw)} in the worst case and {M1(sm)} in the medium case"
+          + (f", and these lots would lose money in the worst case: {', '.join(losers)}." if losers else ".")]
     yrs = portfolio(SEL)["years"]
     L += ["", f"Projects average {yrs:.1f} years from purchase to sale. \"Profit ÷ cash needed\" is over the whole project, not per year."]
     out(L)
@@ -110,11 +124,11 @@ elif mode == "market":
     names = {"RIV": "Riviera", "HUNT": "Huntington Palisades", "BLUFF": "Bluffs / El Medio"}
     L = head("Market evidence", "What newer homes have actually sold for in the three neighborhoods where the ten lots are, plus the brand-new homes now for sale. "
              "A sale counts if it is a house in 90272 built 2010 or later, 2,000+ sf, closed in the last 24 months, and not a burned house sold as land.")
-    L += ["## The price per sf each neighborhood uses", "", "| Neighborhood | Today's price (worst case) | Medium (+10%) | Best (+20%) | How it was set |", "| --- | --- | --- | --- | --- |"]
+    L += ["## The price per sf each neighborhood uses", "", "| Neighborhood | Price used (worst case) | Medium (+10%) | Best (+20%) | How it was set |", "| --- | --- | --- | --- | --- |"]
     for code in ("RIV", "HUNT", "BLUFF"):
         r = nb[code]; v = float(r["applied_psf"])
         how = (f"Median of {r['rule_n']} qualifying sales" if r["status"].startswith("rule") else
-               f"Judgment from {r['rule_n']} qualifying sale(s) (median ${float(r['rule_psf']):,.0f}) and new-home asking prices" if r["rule_n"] not in ("", "0") else "Judgment; no qualifying sales yet")
+               f"Judgment, above the median of {r['rule_n']} qualifying sales (${float(r['rule_psf']):,.0f})" + (", informed by new-home asking prices" if code == "BLUFF" else "") if r["rule_n"] not in ("", "0") else "Judgment; no qualifying sales yet")
         L.append(f"| {names[code]} | ${v:,.0f} | ${v * 1.1:,.0f} | ${v * 1.2:,.0f} | {how} |")
     L += ["", "Lots whose MLS listing shows an ocean view add $100/sf to these.", "", "## Qualifying sales in these neighborhoods", "",
           "| Closed | Address | Neighborhood | Built | Size | Price | Per sf |", "| --- | --- | --- | --- | --- | --- | --- |"]
@@ -123,14 +137,15 @@ elif mode == "market":
     L += ["", "## Brand-new homes for sale (asking prices, not sales)", "", "| Address | Area | Asking | Size | Asking per sf | Status |", "| --- | --- | --- | --- | --- | --- |"]
     for r in csv.DictReader(open(os.path.join(D, "asking_newbuilds.csv"))):
         a_, s_ = float(r["asking"]), float(r["sqft"])
-        L.append(f"| {r['address']} | {r['neighborhood']} | {M(a_)} | {int(s_):,} sf | ${a_ / s_:,.0f} | {r['status'].split(';')[0]} |")
+        L.append(f"| {r['address']} | {r['neighborhood']} | {M(a_)} | {int(s_):,} sf | ${a_ / s_:,.0f} | {r['status']} |")
     L += ["", "## What happened after other fires", "",
           "| Fire | What prices did | Source |", "| --- | --- | --- |",
-          "| Woolsey, Malibu (2018) | $/sf up 5% inside the burn area vs. 27% outside over 3 years | [Redfin](https://www.redfin.com/news/california-wildfire-housing-market-impact/) |",
+          "| Woolsey, Malibu (2018) | $/sf up 5% inside the burn area vs. 27% outside over 3 years; 29 homes rebuilt and none listed at 30 months | [Redfin](https://www.redfin.com/news/california-wildfire-housing-market-impact/), [Malibu Times](https://malibutimes.com/article_1df5121e-b2ea-11eb-8ca9-a38f9317352f) |",
           "| Tubbs, Santa Rosa (2017) | $/sf up 25% inside vs. 35% outside over 3 years | [Redfin](https://www.redfin.com/news/california-wildfire-housing-market-impact/) |",
-          "| Eaton, Altadena (2025) | 3245 Arrowhead Ct rebuild listed at about $1.9M, closed 6/17/2026 at $1.6M | [Compass](https://www.compass.com/homedetails/3245-Arrowhead-Ct-Altadena-CA-91001/1KO7GK_pid/) |",
+          "| Eaton, Altadena (2025) | 3245 Arrowhead Ct rebuild listed at about $1.9M, closed 6/17/2026 at $1.6M; a local developer estimates new homes sell about 20% below no-fire value | [Compass](https://www.compass.com/homedetails/3245-Arrowhead-Ct-Altadena-CA-91001/1KO7GK_pid/), [Homes.com](https://www.homes.com/news/a-year-after-historic-blaze-newly-built-homes-are-selling-again-in-altadena/1191062094/) |",
           "| California fires 2001–2015 | Burned areas gained 2–6% vs. neighbors over 1–4 years, peaking around year 3 | [Issler et al., UC Berkeley](https://faculty.haas.berkeley.edu/stanton/pdf/fire.pdf) |", "",
-          "That is why the worst case assumes no premium for a new home. Sales data: Redfin, Homes.com and Compass records, still to be confirmed against MLS and title."]
+          "Across 90272, the median price per sf is down about 17% from a year earlier ([Redfin](https://www.redfin.com/neighborhood/64066/CA/Los-Angeles/Pacific-Palisades/housing-market), Aug 2026). That is why the worst case assumes no premium for a new home; the Project numbers tab shows the result at recent closed-sale medians. "
+          "Sales data: an MLS export plus Redfin and Compass records, still to be confirmed against title."]
     out(L)
 
 elif mode == "inputs":
