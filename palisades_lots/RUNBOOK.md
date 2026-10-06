@@ -64,15 +64,14 @@ changed. Everything lives in this folder; nothing outside it is touched.
 6. Data room (Claude Docs, doc id 5ffcb13e-c541-499f-8117-b00be860f143). Read before every edit; people edit this
    doc, so never overwrite their words.
    - Every run: replace the All lots tab's whole body with `python3 lots_tab.py <date>`: one batch that creates a new
-     prose node (parent file a78c458d-13dc, markdown from lots_tab.py) and updates file a78c458d-13dc's content to it.
+     prose node (parent file a78c458d-13dc, markdown from lots_tab.py) and updates file a78c458d-13dc's content to it. This tab is the live lot screen Tal and investors use instead of the spreadsheet, so it must always match the model.
    - Every run, the same way (new node, then point the file at it): the "10-lot plan (updated daily)" tab (file
      d6b1d72a-9c55) from `python3 model_tab.py plan <date>`, and the "Model inputs & math (updated daily)" tab
      (file e75fea13-dd74) from `python3 model_tab.py inputs <date>`. These two tabs replace the spreadsheet: every
      input, every cost line and the deal split come only from these scripts, never hand-typed. The inputs tab is
      large; if one create call is too big, create the node with everything up to "## Full cost build-up", point the
      file at it, then insert the rest at the end of that node. If `model_tab.py plan` reports a plan lot no longer
-     listed, or a plan lot drops below 15%, say so in the report. Never edit data/plan10.txt yourself. This tab is the live lot screen Tal and investors use instead of the
-     spreadsheet, so it must always match the model.
+     listed, or a plan lot drops below 15%, say so in the report. Never edit data/plan10.txt yourself.
    - If comps changed: replace the Comps tracker tab's whole body with `python3 comps_tab.py <date>`.
    - If a shortlisted lot's numbers changed (compare sum_before/sum_after): run `python3 shortlist_md.py` and update
      that lot's tab from its output (lead sentence, max offer line, house line, "Cost and profit, medium case" table,
