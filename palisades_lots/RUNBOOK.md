@@ -17,7 +17,9 @@ changed. Everything lives in this folder; nothing outside it is touched.
 - `data/asking_newbuilds.csv`: new builds for sale (asking prices only, never used as comps).
 - `data/reference_points.csv`, `data/damage.csv`: neighborhood matching and cached fire-damage lookups.
 - Scripts: `redfin_land.js`, `redfin_sold.js` (run in the browser), `update_lots.py`, `update_comps.py`,
-  `build_workbook.py`, `snapshot.py`, `summary.py`, `comps_tab.py`, `lots_tab.py`, `shortlist_md.py`, `model_tab.py`.
+  `build_workbook.py`, `snapshot.py`, `summary.py`, `comps_tab.py`, `lots_tab.py`, `shortlist_md.py`, `model_tab.py`,
+  `deal.py` (shared deal math: both financing models), `investor_tab.py` (investor data room tabs).
+- `data/investor_notes.csv`: the plain-English fact line for each plan lot in the investor data room (verified facts only).
 - `data/plan10.txt`: the lots in the 10-lot plan. Only Tal or Yehuda change it.
 - `Palisades_Lot_Screen.xlsx`: the current workbook. `reports/`: one comps report per run.
 
@@ -72,6 +74,16 @@ changed. Everything lives in this folder; nothing outside it is touched.
      large; if one create call is too big, create the node with everything up to "## Full cost build-up", point the
      file at it, then insert the rest at the end of that node. If `model_tab.py plan` reports a plan lot no longer
      listed, or a plan lot drops below 15%, say so in the report. Never edit data/plan10.txt yourself.
+   - Investor data room (separate doc, id 60b636ad-64f1-4049-96b4-0f90844bc9e9; investors and contractors see it, so
+     no deal terms, no max offers, no internal notes). Every run, same swap method (new node, point the file at it):
+     "The ten lots" (file f8ba68cf-eb69) from `python3 investor_tab.py lots <date>`, "Project numbers" (file
+     701685a4-3add) from `investor_tab.py numbers`, "Market evidence" (file 4a3e7397-a31b) from `investor_tab.py market`,
+     "Assumptions and method" (file 3c12eab4-27e9) from `investor_tab.py inputs`. The "Start here" tab (file
+     7a245a8f-c9d1) is hand-written: never regenerate it. If a plan lot gets a new verified fact (permit, status), update
+     its line in data/investor_notes.csv.
+   - The investor deck (https://claude.ai/artifact/Kzvd7kcB5m9rmTZjb2tPeJ) is a 10/6 snapshot and is NOT edited by this
+     run. If the ten-lot medium profit moves more than 5% from $17.3M, or a plan lot goes pending/sold, tell Yehuda the
+     deck's numbers need a refresh.
    - If comps changed: replace the Comps tracker tab's whole body with `python3 comps_tab.py <date>`.
    - If a shortlisted lot's numbers changed (compare sum_before/sum_after): run `python3 shortlist_md.py` and update
      that lot's tab from its output (lead sentence, max offer line, house line, "Cost and profit, medium case" table,
