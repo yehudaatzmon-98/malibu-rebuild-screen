@@ -2,7 +2,7 @@
 711 Chapala Dr,HUNT,4375000,3383,7504,8008,"LADBS: plan check approved 7/8/26, 7,504 sf (not advertised as RTI)",Y
 701 Via de la Paz,VDLP,3225000,6622,,8304,panoramic ocean view,
 683 Alma Real Dr,HUNT,5500000,3319,,13930,corner ocean view,
-533 Mount Holyoke Ave,VDLP,2395000,1796,,7955,,
+533 Mount Holyoke Ave,VDLP,2290000,1796,,7955,,
 732 Hampden Pl,ALPHA,2195000,3395,,15123,detail blocked; price change seen 9/29,
 736 Haverford Ave,VDLP,2395000,1713,,7042,,
 432 Beirut Ave,VDLP,2150000,1672,,4004,small lot,
@@ -17,7 +17,7 @@
 15329 De Pauw St,VDLP,2345000,5423,,8156,517 DOM; coastal,
 14736 McKendree Ave,ALPHA,3195000,3897,6226,7695,"LADBS: plan check approved 9/25/26, 6,226 sf (listing 6,400)",Y
 1226 Monument St,ALPHA,2595000,5984,6000,7441,"LADBS: PERMIT ISSUED 6/29/26, 6,000 sf",Y
-1218 Monument St,ALPHA,2150000,1207,,6418,ocean views,
+1218 Monument St,ALPHA,2125000,1207,,6418,ocean views,
 1344 Monument St,ALPHA,2850000,2474,,10428,land lease? verify,
 866 Fiske St,ALPHA,1835000,1631,,5199,6 cuts; price change seen 9/29,
 1160 Galloway St,ALPHA,2395000,1116,,6501,plans 4293 not submitted; price change seen 9/29,
@@ -25,7 +25,6 @@
 1324 Marinette Rd,ALPHA,2900000,3409,,13068,big flat view lot,
 1011 Embury St,ALPHA,1895000,1216,,5197,"LADBS: 1-story plans in review, not approved",
 15312 McKendree Ave,ALPHA,2350000,2269,,8135,4 cuts,
-15306 McKendree Ave,ALPHA,2500000,1235,,7017,,
 14619 Bestor Blvd,ALPHA,2795000,2828,,7802,,
 14607 Bestor Blvd,ALPHA,2999000,5636,,7803,,
 921 Kagawa St,ALPHA,2999000,2688,,6500,354 DOM,
@@ -44,7 +43,7 @@
 676 N Las Casas Ave,BLUFF,1500000,1440,,9307,,
 711 Muskingum Ave,BLUFF,1995000,3590,3496,6058,"LADBS: plan check approved 8/25/26, 3,496 sf",Y
 501 Muskingum Pl,BLUFF,1575000,1409,,4984,septic,
-16150 Northfield St,BLUFF,1395000,1302,4270,5556,"LADBS: plan check approved 6/25/26, 4,270 sf (listing 5,200); flip",Y
+16150 Northfield St,BLUFF,1345000,1302,4270,5556,"LADBS: plan check approved 6/25/26, 4,270 sf (listing 5,200); flip",Y
 558 Erskine Dr,BLUFF,1699999,1907,,6507,,
 611 Erskine Dr,BLUFF,1500000,1395,,5212,,
 651 Erskine Dr,BLUFF,2499000,3049,,13803,508 DOM; price change seen 9/29,
@@ -62,7 +61,6 @@
 1055 Las Pulgas Rd,UPS,2050000,2647,,12083,,
 1067 Las Pulgas Rd,UPS,1550000,1842,2935,10733,"LADBS: PERMIT ISSUED 3/12/26, 2,935 sf",Y
 1018 Maroney Ln,UPS,2850000,2891,,19493,,
-871 Oreo Pl,UPS,1300000,2100,4389,5262,"LADBS: plan check approved 8/26/26, 4,389 sf (not advertised)",Y
 16021 Anoka Dr,UPS,2395000,2228,,13487,,
 941 Bienveneda Ave,UPS,1995000,1683,,13146,,
 1227 Bienveneda Ave,UPS,2198000,1967,,14840,,
@@ -83,7 +81,6 @@
 16613 Pequeno Pl,MK,2750000,1950,,41181,flag lot,
 16918 Marquez Ave,MK,1395000,2310,,6333,,
 17053 Bollinger Dr,MK,2898000,4603,,9631,,
-16742 Bollinger Dr,MK,1250000,1456,,6019,,
 16503 Las Casas Pl,MK,1395000,2313,,19135,,
 16521 Las Casas Pl,MK,1195000,1857,,9021,,
 838 N Las Casas Ave,MK,848000,2200,,4504,small lot,
@@ -144,3 +141,5 @@
 1022 Lachman Ln,MK,1995000,2598,,12128,"new listing 2026-10-06; no new-house application in LADBS open data (APN 4419004018, 10/6/26)",
 1405 El Bosque Ct,HIGH,1198000,4600,,16621,"new listing 2026-10-06; no new-house application in LADBS open data (APN 4431026009, 10/6/26)",
 1005 Villa Grove Dr,RIV,3477000,2588,,17838,"new listing 2026-10-06; no new-house application in LADBS open data (APN 4409006001, 10/6/26; only a 2022 alter/repair permit, finaled)",
+665 Las Lomas Ave,BLUFF,1385000,1148,,5624,"new listing 2026-10-07; no new-house application in LADBS open data (APN 4414014005, 10/7/26)",
+15317 De Pauw St,VDLP,2295000,1501,,8250,"new listing 2026-10-07; no new-house application in LADBS open data (APN 4412011005, 10/7/26)",

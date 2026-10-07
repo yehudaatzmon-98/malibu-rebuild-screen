@@ -14,7 +14,6 @@
 16614 Pequeno Pl
 16503 Las Casas Pl
 16550 Akron St
-871 Oreo Pl
 1515 Umeo Rd
 16561 Las Casas Pl
 15329 De Pauw St
@@ -59,7 +58,6 @@
 16613 Pequeno Pl
 664 Las Lomas Ave
 501 Muskingum Pl
-16742 Bollinger Dr
 1467 Via Cresta
 722 Patterson Pl
 819 Jacon Way
@@ -96,7 +94,6 @@
 1344 Monument St
 921 Kagawa St
 866 Fiske St
-15306 McKendree Ave
 1160 Galloway St
 1011 Embury St
 1028 Chautauqua Blvd
@@ -143,3 +140,5 @@
 1022 Lachman Ln
 1405 El Bosque Ct
 1005 Villa Grove Dr
+665 Las Lomas Ave
+15317 De Pauw St

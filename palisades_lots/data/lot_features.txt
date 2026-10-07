@@ -145,3 +145,5 @@ address|ocean_view|gated|mls_view
 1022 Lachman Ln|1|0|City Lights,City,Pool,Ocean,Mountains,Hills
 1405 El Bosque Ct|1|0|Mountains,Ocean,Panoramic,Canyon
 1005 Villa Grove Dr|1|0|Canyon,Ocean
+665 Las Lomas Ave|0|0|Canyon,Tree Top
+15317 De Pauw St|0|0|Canyon,Mountains,Greenbelt
