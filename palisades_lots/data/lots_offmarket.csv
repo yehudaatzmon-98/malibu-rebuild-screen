@@ -8,3 +8,7 @@ date,address,submarket,ask,prior_sf,plan_sf,lotsf,flags,approved
 2026-10-07,15306 McKendree Ave,ALPHA,2500000,1235,,7017,,
 2026-10-07,871 Oreo Pl,UPS,1300000,2100,4389,5262,"LADBS: plan check approved 8/26/26, 4,389 sf (not advertised)",Y
 2026-10-07,16742 Bollinger Dr,MK,1250000,1456,,6019,,
+2026-10-08,16614 Pequeno Pl,MK,990000,2061,,13699,NEW 9/29; AUCTION listing (price may be a starting bid); seller has slope analysis + plans,
+2026-10-08,16957 Livorno Dr,MK,2000000,1873,,9239,NEW 9/29; flat corner lot,
+2026-10-08,250 Trino Way,BLUFF,8288000,3085,,12581,new listing 2026-10-01; no new-house application in LADBS open data (10/1/26),
+2026-10-08,16661 Cumbre Verde Ct,HIGH,1500000,7535,,15071,"new listing 2026-10-05; no new-house application in LADBS open data (APN 4431033021, 10/5/26)",

@@ -147,3 +147,4 @@ address|ocean_view|gated|mls_view
 1005 Villa Grove Dr|1|0|Canyon,Ocean
 665 Las Lomas Ave|0|0|Canyon,Tree Top
 15317 De Pauw St|0|0|Canyon,Mountains,Greenbelt
+17290 Avenida De La Herradura|0|0|Mountains

@@ -11,7 +11,6 @@
 824 Chautauqua Blvd
 622 Alma Real Dr
 16723 W Sunset Blvd
-16614 Pequeno Pl
 16503 Las Casas Pl
 16550 Akron St
 1515 Umeo Rd
@@ -65,7 +64,6 @@
 1355 Berea Pl
 1161 Via De La Paz
 539 Muskingum Pl
-16957 Livorno Dr
 1055 Las Pulgas Rd
 736 Haverford Ave
 320 Bellino Dr
@@ -123,7 +121,6 @@
 16942 Bollinger Dr
 338 Mount Holyoke
 1111 Kagawa St
-250 Trino Way
 16810 Glynn Dr
 17860 W Lecco Ln
 405 N Puerto Del Mar
@@ -135,10 +132,10 @@
 717 Via De La Paz
 906 Kagawa St
 1115 Via De La Paz
-16661 Cumbre Verde Ct
 15241 Via de las Olas
 1022 Lachman Ln
 1405 El Bosque Ct
 1005 Villa Grove Dr
 665 Las Lomas Ave
 15317 De Pauw St
+17290 Avenida De La Herradura
