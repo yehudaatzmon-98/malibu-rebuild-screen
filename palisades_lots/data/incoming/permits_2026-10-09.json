@@ -1,0 +1,9 @@
+{
+ "17056 Livorno Dr": {"approved_sf": null, "note": "no permit records in LADBS open data (APN 4419017019, 10/9/26)"},
+ "15305 De Pauw St": {"approved_sf": 5309, "note": "LADBS 25010-30000-05056: wildfire rebuild SFD, PC Info Complete 12/4/25, 5,309 sf (open-data square_footage; basement walls and part of foundation to remain); second application 26014-30000-03089 Quality Review Completed 8/19/26, same 5,309 sf"},
+ "14902 Mc Kendree Ave": {"approved_sf": null, "note": "no permit records in LADBS open data (APN 4422011024, 10/9/26)"},
+ "14912 Mc Kendree Ave": {"approved_sf": null, "note": "no permit records in LADBS open data (APN 4422011002, 10/9/26)"},
+ "827 Lachman Ln": {"approved_sf": null, "note": "no rebuild application in LADBS open data; only a 2020 trellis permit (APN 4419006029, 10/9/26)"},
+ "14629 Whitfield Ave": {"approved_sf": null, "note": "no permit records in LADBS open data (APN 4422009005, 10/9/26)"},
+ "17834 Porto Marina Way": {"approved_sf": null, "note": "no permit records in LADBS open data (APN 4416015061, 10/9/26)"}
+}

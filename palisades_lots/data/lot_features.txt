@@ -148,3 +148,10 @@ address|ocean_view|gated|mls_view
 665 Las Lomas Ave|0|0|Canyon,Tree Top
 15317 De Pauw St|0|0|Canyon,Mountains,Greenbelt
 17290 Avenida De La Herradura|0|0|Mountains
+17056 Livorno Dr|1|0|Ocean
+15305 De Pauw St|1|0|Canyon,Hills,Mountains,Ocean,City Lights
+14902 Mc Kendree Ave|1|0|Ocean,Mountains
+14912 Mc Kendree Ave|1|0|Ocean,Mountains
+827 Lachman Ln|1|0|Catalina,Ocean,White Water,Coastline,City,City Lights,Pier,Water
+14629 Whitfield Ave|1|0|Coastline,Mountains
+17834 Porto Marina Way|1|0|Ocean,White Water

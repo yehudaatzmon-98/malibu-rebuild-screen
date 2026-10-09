@@ -32,7 +32,7 @@
 1314 Goucher St,ALPHA,4300000,5817,,18307,,
 1365 Goucher St,ALPHA,2995000,2318,,11316,,
 1355 Berea Pl,ALPHA,4500000,6785,7500,9410,approved; seller financing,
-14410 Villa Woods Pl,RIV,2795000,4219,,13724,pool remains,
+14410 Villa Woods Pl,RIV,2525000,4219,,13724,pool remains,
 1078 Villa Grove Dr,RIV,2670000,2283,,11467,,
 909 Rivas Canyon Rd,RIV,3750000,3254,,18344,,
 14511 W Sunset Blvd,RIV,1099000,2163,,7006,"private rd off Sunset; Tal 10/1: something feels off (access/entrance off Sunset), says it is a foreclosure; verify title and access",
@@ -132,7 +132,6 @@
 16778 Edgar St,BLUFF,1385000,3641,3455,5698,"new listing 2026-10-05; LADBS 25010-30000-02133: PERMIT ISSUED 6/3/26, 3,455 sf (open-data square_footage 3,454.6)",Y
 717 Via De La Paz,VDLP,2950000,3351,3579,8302,"new listing 2026-10-05; LADBS 25010-10000-06355: plan check approved 3/13/26, 3,579 sf (open-data square_footage; permit report shows no size); 456 sf ADU 25010-10000-06357 also approved",Y
 906 Kagawa St,ALPHA,2499000,6125,,7503,"new listing 2026-10-05; no new-house application in LADBS open data (APN 4423023002, 10/5/26)",
-1115 Via De La Paz,ALPHA,2499000,5087,,7993,"new listing 2026-10-05; LADBS 25010-30000-01756: new-house application, verifications in progress 9/25/26, not approved",
 15241 Via de las Olas,VDLP,5500000,2032,,6493,"bluff-front; relisted 10/2/26 after leaving listings 10/1 (Redfin history); no new-house application in LADBS open data (APN 4412025006, 10/5/26)",
 1022 Lachman Ln,MK,1995000,2598,,12128,"new listing 2026-10-06; no new-house application in LADBS open data (APN 4419004018, 10/6/26)",
 1405 El Bosque Ct,HIGH,1198000,4600,,16621,"new listing 2026-10-06; no new-house application in LADBS open data (APN 4431026009, 10/6/26)",
@@ -140,3 +139,10 @@
 665 Las Lomas Ave,BLUFF,1385000,1148,,5624,"new listing 2026-10-07; no new-house application in LADBS open data (APN 4414014005, 10/7/26)",
 15317 De Pauw St,VDLP,2295000,1501,,8250,"new listing 2026-10-07; no new-house application in LADBS open data (APN 4412011005, 10/7/26)",
 17290 Avenida De La Herradura,HIGH,980000,2958,,6162,"new listing 2026-10-08; no permit records of any kind in LADBS open data (APN 4431013012, 10/8/26)",
+17056 Livorno Dr,MK,1395000,1538,,6282,"new listing 2026-10-09; no permit records in LADBS open data (APN 4419017019, 10/9/26)",
+15305 De Pauw St,VDLP,3250000,5309,5309,7587,"new listing 2026-10-09; LADBS 25010-30000-05056: wildfire rebuild SFD, PC Info Complete 12/4/25, 5,309 sf (open-data square_footage; basement walls and part of foundation to remain); second application 26014-30000-03089 Quality Review Completed 8/19/26, same 5,309 sf",Y
+14902 Mc Kendree Ave,ALPHA,3500000,3450,,8753,"new listing 2026-10-09; no permit records in LADBS open data (APN 4422011024, 10/9/26)",
+14912 Mc Kendree Ave,ALPHA,3500000,3247,,8439,"new listing 2026-10-09; no permit records in LADBS open data (APN 4422011002, 10/9/26)",
+827 Lachman Ln,MK,6895000,3417,,29285,"new listing 2026-10-09; no rebuild application in LADBS open data; only a 2020 trellis permit (APN 4419006029, 10/9/26)",
+14629 Whitfield Ave,ALPHA,2995000,2448,,9753,"new listing 2026-10-09; no permit records in LADBS open data (APN 4422009005, 10/9/26)",
+17834 Porto Marina Way,CAST,1299000,1776,,3747,"new listing 2026-10-09; no permit records in LADBS open data (APN 4416015061, 10/9/26)",

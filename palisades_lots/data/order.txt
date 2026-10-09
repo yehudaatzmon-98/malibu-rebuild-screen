@@ -131,7 +131,6 @@
 16778 Edgar St
 717 Via De La Paz
 906 Kagawa St
-1115 Via De La Paz
 15241 Via de las Olas
 1022 Lachman Ln
 1405 El Bosque Ct
@@ -139,3 +138,10 @@
 665 Las Lomas Ave
 15317 De Pauw St
 17290 Avenida De La Herradura
+17056 Livorno Dr
+15305 De Pauw St
+14902 Mc Kendree Ave
+14912 Mc Kendree Ave
+827 Lachman Ln
+14629 Whitfield Ave
+17834 Porto Marina Way
